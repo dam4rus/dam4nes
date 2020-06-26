@@ -1,4 +1,4 @@
-use crate::hardware::{CPU, Sign, Flags, Memory, AddressingMode};
+use crate::hardware::{AddressingMode, Flags, Memory, Sign, CPU};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InstructionType {
@@ -21,29 +21,23 @@ pub struct Instruction {
 impl Instruction {
     pub fn from_machine_code(memory: &[u8]) -> Option<Self> {
         match memory {
-            [ 0xAD, fst, snd, .. ] => {
-                Some(Self::new(
-                    InstructionType::LDA, 
-                    AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd]))
-                ))
-            }
-            [ 0xBD, fst, snd, .. ] => {
-                Some(Self::new(
-                    InstructionType::LDA,
-                    AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
-                ))
-            }
-            [ 0xB9, fst, snd, .. ] => {
-                Some(Self::new(
-                    InstructionType::LDA,
-                    AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
-                ))
-            }
-            [ 0xA9, value, .. ] => Some(Self::new(InstructionType::LDA, AddressingMode::Immediate(*value))),
-            [ 0xA5, value, .. ] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPage(*value))),
-            [ 0xA1, value, .. ] => Some(Self::new(InstructionType::LDA, AddressingMode::IndexedIndirect(*value))),
-            [ 0xB5, value, .. ] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPageX(*value))),
-            [ 0xB1, value, .. ] => Some(Self::new(InstructionType::LDA, AddressingMode::IndirectIndexed(*value))),
+            [0xAD, fst, snd, ..] => Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            )),
+            [0xBD, fst, snd, ..] => Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            )),
+            [0xB9, fst, snd, ..] => Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            )),
+            [0xA9, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::Immediate(*value))),
+            [0xA5, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPage(*value))),
+            [0xA1, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::IndexedIndirect(*value))),
+            [0xB5, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPageX(*value))),
+            [0xB1, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::IndirectIndexed(*value))),
             _ => None,
         }
     }
@@ -63,10 +57,7 @@ pub struct InstructionExecutor<'a> {
 
 impl<'a> InstructionExecutor<'a> {
     pub fn new(cpu: &'a mut CPU, memory: &'a mut Memory) -> Self {
-        Self {
-            cpu,
-            memory,
-        }
+        Self { cpu, memory }
     }
 
     pub fn execute(&mut self, instruction: Instruction) {
@@ -108,11 +99,14 @@ impl<'a> InstructionExecutor<'a> {
     }
 
     fn read_8_bit_value(&self, instruction: Instruction) -> u8 {
-        self.memory.read_8_bit_value_by_mode(self.cpu, instruction.addressing_mode).expect("Failed to read value")
+        self.memory
+            .read_8_bit_value_by_mode(self.cpu, instruction.addressing_mode)
+            .expect("Failed to read value")
     }
 
     fn write_8_bit_value(&mut self, instruction: Instruction, value: u8) {
-        self.memory.write_8_bit_value_by_mode(self.cpu, instruction.addressing_mode, value);
+        self.memory
+            .write_8_bit_value_by_mode(self.cpu, instruction.addressing_mode, value);
     }
 
     fn update_flags_after_arithmetic(&mut self, old_a: u8, value: u8, carry: bool) {
@@ -137,20 +131,17 @@ impl<'a> InstructionExecutor<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::hardware::{CPU, Memory, AddressingMode};
-    use super::{
-        Instruction, InstructionType, InstructionExecutor,
-    };
+    use super::{Instruction, InstructionExecutor, InstructionType};
+    use crate::hardware::{AddressingMode, Memory, CPU};
 
     #[test]
     pub fn test_adc() {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01))
-        );
+
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x02);
@@ -166,9 +157,8 @@ pub mod tests {
         cpu.A = 0x01;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
@@ -184,9 +174,8 @@ pub mod tests {
         cpu.A = 0x7F;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x80);
         assert!(!flags.carry);
@@ -201,9 +190,8 @@ pub mod tests {
         cpu.A = 0x80;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x7F);
@@ -219,9 +207,8 @@ pub mod tests {
         cpu.A = 0x01;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
@@ -237,9 +224,8 @@ pub mod tests {
         cpu.A = 0x01;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x02);
@@ -255,9 +241,8 @@ pub mod tests {
         cpu.A = 0xFF;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
@@ -273,9 +258,8 @@ pub mod tests {
         cpu.A = 0x00;
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
 
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0xFF);
@@ -290,9 +274,8 @@ pub mod tests {
         let mut cpu = CPU::new();
         let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01)));
 
         assert_eq!(cpu.A, 0x01);
     }
@@ -301,9 +284,8 @@ pub mod tests {
     pub fn test_ldx() {
         let mut cpu = CPU::new();
         let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01)));
         assert_eq!(cpu.X, 0x01);
     }
 
@@ -311,9 +293,8 @@ pub mod tests {
     pub fn test_ldy() {
         let mut cpu = CPU::new();
         let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01)));
         assert_eq!(cpu.Y, 0x01);
     }
 
@@ -322,9 +303,8 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::STA, AddressingMode::Absolute(0x0200))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::STA, AddressingMode::Absolute(0x0200)));
         assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
     }
 
@@ -333,9 +313,8 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.X = 0x01;
         let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::STX, AddressingMode::Absolute(0x0200))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::STX, AddressingMode::Absolute(0x0200)));
         assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
     }
 
@@ -344,57 +323,80 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.Y = 0x01;
         let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(
-            Instruction::new(InstructionType::STY, AddressingMode::Absolute(0x0200))
-        );
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::STY, AddressingMode::Absolute(0x0200)));
         assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
     }
 
     #[test]
     pub fn test_lda_absolute_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xAD, 0x10, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::Absolute(0xD010)));
+        let lda = Instruction::from_machine_code(&[0xAD, 0x10, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::Absolute(0xD010))
+        );
     }
 
     #[test]
     pub fn test_lda_absolute_x_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xBD, 0x10, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteX(0xD010)));
+        let lda = Instruction::from_machine_code(&[0xBD, 0x10, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteX(0xD010))
+        );
     }
 
     #[test]
     pub fn test_lda_absolute_y_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xB9, 0x10, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteY(0xD010)));
+        let lda = Instruction::from_machine_code(&[0xB9, 0x10, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteY(0xD010))
+        );
     }
 
     #[test]
     pub fn test_lda_immediate_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xA9, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0xD0)));
+        let lda = Instruction::from_machine_code(&[0xA9, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0xD0))
+        );
     }
 
     #[test]
     pub fn test_lda_zero_page_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xA5, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::ZeroPage(0xD0)));
+        let lda = Instruction::from_machine_code(&[0xA5, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::ZeroPage(0xD0))
+        );
     }
 
     #[test]
     pub fn test_lda_indexed_indirect_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xA1, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::IndexedIndirect(0xD0)));
+        let lda = Instruction::from_machine_code(&[0xA1, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::IndexedIndirect(0xD0))
+        );
     }
 
     #[test]
     pub fn test_lda_zero_page_x_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xB5, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::ZeroPageX(0xD0)));
+        let lda = Instruction::from_machine_code(&[0xB5, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::ZeroPageX(0xD0))
+        );
     }
 
     #[test]
     pub fn test_lda_indirect_indexed_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[ 0xB1, 0xD0 ]).expect("Invalid machine code");
-        assert_eq!(lda, Instruction::new(InstructionType::LDA, AddressingMode::IndirectIndexed(0xD0)));
+        let lda = Instruction::from_machine_code(&[0xB1, 0xD0]).expect("Invalid machine code");
+        assert_eq!(
+            lda,
+            Instruction::new(InstructionType::LDA, AddressingMode::IndirectIndexed(0xD0))
+        );
     }
 }

@@ -1,5 +1,5 @@
+use super::{AddressingMode, CPU};
 use std::u16;
-use super::{CPU, AddressingMode};
 
 pub struct Memory([u8; u16::MAX as usize]);
 
@@ -9,13 +9,13 @@ impl Memory {
     }
 
     pub fn stack(&mut self) -> Stack {
-        Stack(&mut self.0[0x0100 .. 0x0200])
+        Stack(&mut self.0[0x0100..0x0200])
     }
 
     pub fn read_8_bit_value(&self, address: u16) -> u8 {
         self.0[address as usize]
     }
-    
+
     pub fn write_8_bit_value(&mut self, address: u16, value: u8) {
         self.0[address as usize] = value;
     }
@@ -24,14 +24,17 @@ impl Memory {
         match addressing_mode {
             AddressingMode::Accumulator => Some(cpu.A),
             AddressingMode::Immediate(value) => Some(value),
-            mode => self.address_by_mode(cpu, mode).map(|address| self.0[address as usize])
+            mode => self.address_by_mode(cpu, mode).map(|address| self.0[address as usize]),
         }
     }
 
     pub fn write_8_bit_value_by_mode(&mut self, cpu: &CPU, addressing_mode: AddressingMode, value: u8) {
-        self.write_8_bit_value(self.address_by_mode(cpu, addressing_mode).expect("Invalid addressing mode"), value);
+        self.write_8_bit_value(
+            self.address_by_mode(cpu, addressing_mode)
+                .expect("Invalid addressing mode"),
+            value,
+        );
     }
-    
 
     pub fn address_by_mode(&self, cpu: &CPU, addressing_mode: AddressingMode) -> Option<u16> {
         match addressing_mode {
@@ -54,7 +57,7 @@ impl Memory {
     fn read_16_bit_value(&self, address: u16) -> u16 {
         u16::from_le_bytes([
             self.0[address as usize],
-            self.0[address.checked_add(1).expect("Address out of bounds") as usize]
+            self.0[address.checked_add(1).expect("Address out of bounds") as usize],
         ])
     }
 }
@@ -79,7 +82,7 @@ impl<'a> Stack<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::hardware::{CPU, Memory};
+    use crate::hardware::{Memory, CPU};
 
     #[test]
     pub fn test_stack() {

@@ -1,5 +1,4 @@
 mod hardware;
 mod instruction;
 
-fn main() {
-}
+fn main() {}
