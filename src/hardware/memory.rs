@@ -52,9 +52,10 @@ impl Memory {
     }
 
     fn read_16_bit_value(&self, address: u16) -> u16 {
-        let low_byte = self.0[address.checked_add(1).expect("Address out of bounds") as usize];
-        let high_byte = self.0[address as usize];
-        low_byte as u16 | ((high_byte as u16) << 8)
+        u16::from_le_bytes([
+            self.0[address as usize],
+            self.0[address.checked_add(1).expect("Address out of bounds") as usize]
+        ])
     }
 }
 
