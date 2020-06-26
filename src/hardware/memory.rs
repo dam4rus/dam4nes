@@ -12,27 +12,42 @@ impl Memory {
         Stack(&mut self.0[0x0100 .. 0x0200])
     }
 
-    pub fn read_value(&self, cpu: &CPU, addressing_mode: AddressingMode) -> Option<u8> {
+    pub fn read_8_bit_value(&self, address: u16) -> u8 {
+        self.0[address as usize]
+    }
+    
+    pub fn write_8_bit_value(&mut self, address: u16, value: u8) {
+        self.0[address as usize] = value;
+    }
+
+    pub fn read_8_bit_value_by_mode(&self, cpu: &CPU, addressing_mode: AddressingMode) -> Option<u8> {
         match addressing_mode {
-            AddressingMode::Implicit => None,
             AddressingMode::Accumulator => Some(cpu.A),
             AddressingMode::Immediate(value) => Some(value),
-            AddressingMode::ZeroPage(address) => Some(self.0[address as usize]),
-            AddressingMode::ZeroPageX(address) => Some(self.0[address.wrapping_add(cpu.X) as usize]),
-            AddressingMode::ZeroPageY(address) => Some(self.0[address.wrapping_add(cpu.Y) as usize]),
-            AddressingMode::Relative(_) => None,
-            AddressingMode::Absolute(address) => Some(self.0[address as usize]),
-            AddressingMode::AbsoluteX(address) => Some(self.0[(address + cpu.X as u16) as usize]),
-            AddressingMode::AbsoluteY(address) => Some(self.0[(address + cpu.Y as u16) as usize]),
-            AddressingMode::Indirect(_) => None,
+            mode => self.address_by_mode(cpu, mode).map(|address| self.0[address as usize])
+        }
+    }
+
+    pub fn write_8_bit_value_by_mode(&mut self, cpu: &CPU, addressing_mode: AddressingMode, value: u8) {
+        self.write_8_bit_value(self.address_by_mode(cpu, addressing_mode).expect("Invalid addressing mode"), value);
+    }
+    
+
+    pub fn address_by_mode(&self, cpu: &CPU, addressing_mode: AddressingMode) -> Option<u16> {
+        match addressing_mode {
+            AddressingMode::ZeroPage(address) => Some(address as u16),
+            AddressingMode::ZeroPageX(address) => Some(address.wrapping_add(cpu.X) as u16),
+            AddressingMode::ZeroPageY(address) => Some(address.wrapping_add(cpu.Y) as u16),
+            AddressingMode::Absolute(address) => Some(address),
+            AddressingMode::AbsoluteX(address) => Some(address.wrapping_add(cpu.X as u16)),
+            AddressingMode::AbsoluteY(address) => Some(address.wrapping_add(cpu.Y as u16)),
             AddressingMode::IndexedIndirect(address) => {
-                let indirect_address = self.read_16_bit_value(address.wrapping_add(cpu.X) as u16);
-                Some(self.0[indirect_address as usize])
+                Some(self.read_16_bit_value(address.wrapping_add(cpu.X) as u16))
             }
             AddressingMode::IndirectIndexed(address) => {
-                let indirect_address = self.read_16_bit_value(address as u16).wrapping_add(cpu.Y as u16);
-                Some(self.0[indirect_address as usize])
+                Some(self.read_16_bit_value(address as u16).wrapping_add(cpu.Y as u16))
             }
+            _ => None,
         }
     }
 

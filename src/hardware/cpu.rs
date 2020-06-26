@@ -89,7 +89,7 @@ pub enum AddressingMode {
     ZeroPage(u8),
     ZeroPageX(u8),
     ZeroPageY(u8),
-    Relative(i8),
+    Relative(u8),
     Absolute(u16),
     AbsoluteX(u16),
     AbsoluteY(u16),
@@ -133,91 +133,126 @@ impl From<u8> for Sign {
     }
 }
 
-pub trait Instruction {
-    fn execute(&self, cpu: &mut CPU, memory: &mut Memory);
-    fn cycles(&self) -> u8;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum InstructionType {
+    ADC,
+    SBC,
+    LDA,
+    LDX,
+    LDY,
+    STA,
+    STX,
+    STY,
 }
 
-pub struct ADC(pub AddressingMode);
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Instruction {
+    instruction_type: InstructionType,
+    addressing_mode: AddressingMode,
+}
 
-impl Instruction for ADC {
-    fn execute(&self, cpu: &mut CPU, memory: &mut Memory) {
-        let old_accumulator = cpu.A;
-        let value_at_address = memory.read_value(cpu, self.0).expect("Failed to read memory address");
-        let status_flags = cpu.flags();
-        let carried = if status_flags.carry { 1 } else { 0 };
-        cpu.A = cpu.A.wrapping_add(value_at_address).wrapping_add(carried);
-
-        let a_sign = Sign::from(cpu.A);
-        cpu.set_flags(Flags {
-            negative: a_sign == Sign::Negative,
-            overflow: a_sign != Sign::from(old_accumulator) && a_sign != Sign::from(value_at_address),
-            zero: cpu.A == 0,
-            carry: cpu.A < old_accumulator,
-            ..status_flags
-        });
-    }
-
-    fn cycles(&self) -> u8 {
-        match self.0 {
-            AddressingMode::Immediate(_) => 2,
-            AddressingMode::ZeroPage(_) => 3,
-            AddressingMode::ZeroPageX(_) => 4,
-            AddressingMode::Absolute(_) => 4,
-            AddressingMode::AbsoluteX(_) => 4,
-            AddressingMode::AbsoluteY(_) => 4,
-            AddressingMode::IndexedIndirect(_) => 6,
-            AddressingMode::IndirectIndexed(_) => 5,
-            _ => unreachable!("Invalid addressing mode for ADC"),
+impl Instruction {
+    pub fn new(instruction_type: InstructionType, addressing_mode: AddressingMode) -> Self {
+        Self {
+            instruction_type,
+            addressing_mode,
         }
     }
 }
 
-pub struct SBC(pub AddressingMode);
+pub struct InstructionExecutor<'a> {
+    cpu: &'a mut CPU,
+    memory: &'a mut Memory,
+}
 
-impl Instruction for SBC {
-    fn execute(&self, cpu: &mut CPU, memory: &mut Memory) {
-        let old_accumulator = cpu.A;
-        let value_at_address = memory.read_value(cpu, self.0).expect("Failed to read memory address");
-        let status_flags = cpu.flags();
-        let carried = if status_flags.carry { 1 } else { 0 };
-        cpu.A = cpu.A.wrapping_sub(value_at_address).wrapping_sub(carried);
+impl<'a> InstructionExecutor<'a> {
+    pub fn new(cpu: &'a mut CPU, memory: &'a mut Memory) -> Self {
+        Self {
+            cpu,
+            memory,
+        }
+    }
 
-        let a_sign = Sign::from(cpu.A);
-        cpu.set_flags(Flags {
+    pub fn execute(&mut self, instruction: Instruction) {
+        match instruction.instruction_type {
+            InstructionType::ADC => {
+                let old_accumulator = self.cpu.A;
+                let value = self.read_8_bit_value(instruction);
+                let status_flags = self.cpu.flags();
+                let carried = if status_flags.carry { 1 } else { 0 };
+                self.cpu.A = self.cpu.A.wrapping_add(value).wrapping_add(carried);
+
+                self.update_flags_after_arithmetic(old_accumulator, value, self.cpu.A < old_accumulator);
+            }
+            InstructionType::SBC => {
+                let old_accumulator = self.cpu.A;
+                let value = self.read_8_bit_value(instruction);
+                let status_flags = self.cpu.flags();
+                let carried = if status_flags.carry { 1 } else { 0 };
+                self.cpu.A = self.cpu.A.wrapping_sub(value).wrapping_sub(carried);
+
+                self.update_flags_after_arithmetic(old_accumulator, value, self.cpu.A > old_accumulator);
+            }
+            InstructionType::LDA => {
+                self.cpu.A = self.read_8_bit_value(instruction);
+                self.update_flags_after_load(self.cpu.A);
+            }
+            InstructionType::LDX => {
+                self.cpu.X = self.read_8_bit_value(instruction);
+                self.update_flags_after_load(self.cpu.X);
+            }
+            InstructionType::LDY => {
+                self.cpu.Y = self.read_8_bit_value(instruction);
+                self.update_flags_after_load(self.cpu.Y);
+            }
+            InstructionType::STA => self.write_8_bit_value(instruction, self.cpu.A),
+            InstructionType::STX => self.write_8_bit_value(instruction, self.cpu.X),
+            InstructionType::STY => self.write_8_bit_value(instruction, self.cpu.Y),
+        }
+    }
+
+    fn read_8_bit_value(&self, instruction: Instruction) -> u8 {
+        self.memory.read_8_bit_value_by_mode(self.cpu, instruction.addressing_mode).expect("Failed to read value")
+    }
+
+    fn write_8_bit_value(&mut self, instruction: Instruction, value: u8) {
+        self.memory.write_8_bit_value_by_mode(self.cpu, instruction.addressing_mode, value);
+    }
+
+    fn update_flags_after_arithmetic(&mut self, old_a: u8, value: u8, carry: bool) {
+        let a_sign = Sign::from(self.cpu.A);
+        self.cpu.set_flags(Flags {
             negative: a_sign == Sign::Negative,
-            overflow: a_sign != Sign::from(old_accumulator) && a_sign != Sign::from(value_at_address),
-            zero: cpu.A == 0,
-            carry: cpu.A > old_accumulator,
-            ..status_flags
+            overflow: a_sign != Sign::from(old_a) && a_sign != Sign::from(value),
+            zero: self.cpu.A == 0,
+            carry,
+            ..self.cpu.flags()
         });
     }
 
-    fn cycles(&self) -> u8 {
-        match self.0 {
-            AddressingMode::Immediate(_) => 2,
-            AddressingMode::ZeroPage(_) => 3,
-            AddressingMode::ZeroPageX(_) => 4,
-            AddressingMode::Absolute(_) => 4,
-            AddressingMode::AbsoluteX(_) => 4,
-            AddressingMode::AbsoluteY(_) => 4,
-            AddressingMode::IndexedIndirect(_) => 6,
-            AddressingMode::IndirectIndexed(_) => 5,
-            _ => unreachable!("Invalid addressing mode for SBC"),
-        }
+    fn update_flags_after_load(&mut self, register_value: u8) {
+        self.cpu.set_flags(Flags {
+            zero: register_value == 0,
+            negative: Sign::from(register_value) == Sign::Negative,
+            ..self.cpu.flags()
+        })
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::hardware::{CPU, Memory, ADC, SBC, AddressingMode, Instruction};
+    use crate::hardware::{CPU, Memory, AddressingMode, Instruction, InstructionType, InstructionExecutor};
 
     #[test]
     pub fn test_adc() {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        ADC(AddressingMode::Immediate(0x01)).execute(&mut cpu, &mut memory);
+        
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x02);
         assert!(!flags.carry);
@@ -231,7 +266,11 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        ADC(AddressingMode::Immediate(0xFF)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
         assert!(flags.carry);
@@ -245,7 +284,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x7F;
         let mut memory = Memory::new();
-        ADC(AddressingMode::Immediate(0x01)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01))
+        );
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x80);
         assert!(!flags.carry);
@@ -259,7 +301,11 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x80;
         let mut memory = Memory::new();
-        ADC(AddressingMode::Immediate(0xFF)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x7F);
         assert!(flags.carry);
@@ -273,7 +319,11 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        SBC(AddressingMode::Immediate(0x01)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
         assert!(!flags.carry);
@@ -287,7 +337,11 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x01;
         let mut memory = Memory::new();
-        SBC(AddressingMode::Immediate(0xFF)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x02);
         assert!(flags.carry);
@@ -301,7 +355,11 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0xFF;
         let mut memory = Memory::new();
-        SBC(AddressingMode::Immediate(0xFF)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0x00);
         assert!(!flags.carry);
@@ -315,12 +373,81 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.A = 0x00;
         let mut memory = Memory::new();
-        SBC(AddressingMode::Immediate(0x01)).execute(&mut cpu, &mut memory);
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01))
+        );
+
         let flags = cpu.flags();
         assert_eq!(cpu.A, 0xFF);
         assert!(flags.carry);
         assert!(flags.overflow);
         assert!(flags.negative);
         assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_lda() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01))
+        );
+
+        assert_eq!(cpu.A, 0x01);
+    }
+
+    #[test]
+    pub fn test_ldx() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01))
+        );
+        assert_eq!(cpu.X, 0x01);
+    }
+
+    #[test]
+    pub fn test_ldy() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01))
+        );
+        assert_eq!(cpu.Y, 0x01);
+    }
+
+    #[test]
+    pub fn test_sta() {
+        let mut cpu = CPU::new();
+        cpu.A = 0x01;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::STA, AddressingMode::Absolute(0x0200))
+        );
+        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+    }
+
+    #[test]
+    pub fn test_stx() {
+        let mut cpu = CPU::new();
+        cpu.X = 0x01;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::STX, AddressingMode::Absolute(0x0200))
+        );
+        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+    }
+
+    #[test]
+    pub fn test_sty() {
+        let mut cpu = CPU::new();
+        cpu.Y = 0x01;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory).execute(
+            Instruction::new(InstructionType::STY, AddressingMode::Absolute(0x0200))
+        );
+        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
     }
 }
