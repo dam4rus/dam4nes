@@ -10,6 +10,14 @@ pub enum InstructionType {
     STA,
     STX,
     STY,
+    INC,
+    INX,
+    INY,
+    DEC,
+    DEX,
+    DEY,
+    ASL,
+    LSR,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -82,19 +90,57 @@ impl<'a> InstructionExecutor<'a> {
             }
             InstructionType::LDA => {
                 self.cpu.A = self.read_8_bit_value(instruction);
-                self.update_flags_after_load(self.cpu.A);
+                self.update_zero_and_negative_flags(self.cpu.A);
             }
             InstructionType::LDX => {
                 self.cpu.X = self.read_8_bit_value(instruction);
-                self.update_flags_after_load(self.cpu.X);
+                self.update_zero_and_negative_flags(self.cpu.X);
             }
             InstructionType::LDY => {
                 self.cpu.Y = self.read_8_bit_value(instruction);
-                self.update_flags_after_load(self.cpu.Y);
+                self.update_zero_and_negative_flags(self.cpu.Y);
             }
             InstructionType::STA => self.write_8_bit_value(instruction, self.cpu.A),
             InstructionType::STX => self.write_8_bit_value(instruction, self.cpu.X),
             InstructionType::STY => self.write_8_bit_value(instruction, self.cpu.Y),
+            InstructionType::INC => {
+                let value = self.read_8_bit_value(instruction).wrapping_add(1);
+                self.write_8_bit_value(instruction, value);
+                self.update_zero_and_negative_flags(value);
+            }
+            InstructionType::INX => {
+                self.cpu.X = self.cpu.X.wrapping_add(1);
+                self.update_zero_and_negative_flags(self.cpu.X);
+            }
+            InstructionType::INY => {
+                self.cpu.Y = self.cpu.Y.wrapping_add(1);
+                self.update_zero_and_negative_flags(self.cpu.Y);
+            }
+            InstructionType::DEC => {
+                let value = self.read_8_bit_value(instruction).wrapping_sub(1);
+                self.write_8_bit_value(instruction, value);
+                self.update_zero_and_negative_flags(value);
+            }
+            InstructionType::DEX => {
+                self.cpu.X = self.cpu.X.wrapping_sub(1);
+                self.update_zero_and_negative_flags(self.cpu.X);
+            }
+            InstructionType::DEY => {
+                self.cpu.Y = self.cpu.Y.wrapping_sub(1);
+                self.update_zero_and_negative_flags(self.cpu.Y);
+            }
+            InstructionType::ASL => {
+                let old_value = self.read_8_bit_value(instruction);
+                let value = old_value << 1;
+                self.write_8_bit_value(instruction, value);
+                self.update_flags_after_shift(value, (old_value & 0b10000000) != 0);
+            }
+            InstructionType::LSR => {
+                let old_value = self.read_8_bit_value(instruction);
+                let value = old_value >> 1;
+                self.write_8_bit_value(instruction, value);
+                self.update_flags_after_shift(value, (old_value & 0b00000001) != 0);
+            }
         }
     }
 
@@ -120,10 +166,19 @@ impl<'a> InstructionExecutor<'a> {
         });
     }
 
-    fn update_flags_after_load(&mut self, register_value: u8) {
+    fn update_flags_after_shift(&mut self, value: u8, carry: bool) {
         self.cpu.set_flags(Flags {
-            zero: register_value == 0,
-            negative: Sign::from(register_value) == Sign::Negative,
+            negative: Sign::from(value) == Sign::Negative,
+            zero: value == 0,
+            carry,
+            ..self.cpu.flags()
+        })
+    }
+
+    fn update_zero_and_negative_flags(&mut self, value: u8) {
+        self.cpu.set_flags(Flags {
+            zero: value == 0,
+            negative: Sign::from(value) == Sign::Negative,
             ..self.cpu.flags()
         })
     }
@@ -277,7 +332,10 @@ pub mod tests {
         InstructionExecutor::new(&mut cpu, &mut memory)
             .execute(Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01)));
 
+        let flags = cpu.flags();
         assert_eq!(cpu.A, 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
     }
 
     #[test]
@@ -286,7 +344,11 @@ pub mod tests {
         let mut memory = Memory::new();
         InstructionExecutor::new(&mut cpu, &mut memory)
             .execute(Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01)));
+        
+        let flags = cpu.flags();
         assert_eq!(cpu.X, 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
     }
 
     #[test]
@@ -295,7 +357,11 @@ pub mod tests {
         let mut memory = Memory::new();
         InstructionExecutor::new(&mut cpu, &mut memory)
             .execute(Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01)));
+
+        let flags = cpu.flags();
         assert_eq!(cpu.Y, 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
     }
 
     #[test]
@@ -326,6 +392,190 @@ pub mod tests {
         InstructionExecutor::new(&mut cpu, &mut memory)
             .execute(Instruction::new(InstructionType::STY, AddressingMode::Absolute(0x0200)));
         assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+    }
+
+    #[test]
+    pub fn test_inc() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::INC, AddressingMode::Absolute(0x0200)));
+
+        let flags = cpu.flags();
+        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_inx() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::INX, AddressingMode::Implied));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.X, 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_iny() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::INY, AddressingMode::Implied));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.Y, 0x01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_dec() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::DEC, AddressingMode::Absolute(0x0200)));
+
+        let flags = cpu.flags();
+        assert_eq!(memory.read_8_bit_value(0x0200), 0xFF);
+        assert!(flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_dex() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::DEX, AddressingMode::Implied));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.X, 0xFF);
+        assert!(flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_dey() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::DEY, AddressingMode::Implied));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.Y, 0xFF);
+        assert!(flags.negative);
+        assert!(!flags.zero);
+    }
+
+    #[test]
+    pub fn test_asl() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b01;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b10);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+        assert!(!flags.carry);
+    }
+
+    #[test]
+    pub fn test_asl_saturating() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b11111111;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b11111110);
+        assert!(flags.negative);
+        assert!(!flags.zero);
+        assert!(flags.carry);
+    }
+    
+    #[test]
+    pub fn test_asl_carry() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b10000000;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b0);
+        assert!(!flags.negative);
+        assert!(flags.zero);
+        assert!(flags.carry);
+    }
+
+
+    #[test]
+    pub fn test_lsr() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b10;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b01);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+        assert!(!flags.carry);
+    }
+
+    #[test]
+    pub fn test_lsr_saturating() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b11111111;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b01111111);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+        assert!(flags.carry);
+    }
+    
+    #[test]
+    pub fn test_lsr_carry() {
+        let mut cpu = CPU::new();
+        cpu.A = 0b00000001;
+        let mut memory = Memory::new();
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+
+        let flags = cpu.flags();
+        assert_eq!(cpu.A, 0b00);
+        assert!(!flags.negative);
+        assert!(flags.zero);
+        assert!(flags.carry);
+    }
+
+    #[test]
+    pub fn test_memory() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        memory.write_8_bit_value(0x0200, 0b01);
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::ASL, AddressingMode::Absolute(0x0200)));
+
+        let flags = cpu.flags();
+        assert_eq!(memory.read_8_bit_value(0x0200), 0b10);
+        assert!(!flags.negative);
+        assert!(!flags.zero);
+        assert!(!flags.carry);
     }
 
     #[test]

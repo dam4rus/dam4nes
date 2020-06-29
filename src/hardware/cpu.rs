@@ -81,7 +81,7 @@ impl Into<u8> for Flags {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddressingMode {
-    Implicit,
+    Implied,
     Accumulator,
     Immediate(u8),
     ZeroPage(u8),
@@ -99,7 +99,7 @@ pub enum AddressingMode {
 impl AddressingMode {
     pub fn byte_length(&self) -> u8 {
         match self {
-            AddressingMode::Implicit => 1,
+            AddressingMode::Implied => 1,
             AddressingMode::Accumulator => 1,
             AddressingMode::Immediate(_) => 2,
             AddressingMode::ZeroPage(_) => 2,

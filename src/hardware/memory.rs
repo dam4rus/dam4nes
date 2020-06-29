@@ -28,12 +28,17 @@ impl Memory {
         }
     }
 
-    pub fn write_8_bit_value_by_mode(&mut self, cpu: &CPU, addressing_mode: AddressingMode, value: u8) {
-        self.write_8_bit_value(
-            self.address_by_mode(cpu, addressing_mode)
-                .expect("Invalid addressing mode"),
-            value,
-        );
+    pub fn write_8_bit_value_by_mode(&mut self, cpu: &mut CPU, addressing_mode: AddressingMode, value: u8) {
+        match addressing_mode {
+            AddressingMode::Accumulator => cpu.A = value,
+            mode => {
+                self.write_8_bit_value(
+                    self.address_by_mode(cpu, mode)
+                        .expect("Invalid addressing mode"),
+                    value,
+                )
+            }
+        }
     }
 
     pub fn address_by_mode(&self, cpu: &CPU, addressing_mode: AddressingMode) -> Option<u16> {
