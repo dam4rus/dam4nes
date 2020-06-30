@@ -30,7 +30,7 @@ impl CPU {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
 pub struct Flags {
     pub carry: bool,
     pub zero: bool,
