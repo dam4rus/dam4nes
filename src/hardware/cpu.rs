@@ -1,32 +1,31 @@
-#[allow(non_snake_case)]
 #[derive(Debug)]
 pub struct CPU {
-    pub A: u8,
-    pub X: u8,
-    pub Y: u8,
-    pub P: u8,
-    pub S: u8,
-    pub PC: u16,
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
+    pub p: u8,
+    pub s: u8,
+    pub pc: u16,
 }
 
 impl CPU {
     pub fn new() -> Self {
         Self {
-            A: 0x00,
-            X: 0x00,
-            Y: 0x00,
-            P: 0x00,
-            S: 0xFF,
-            PC: 0x0000,
+            a: 0x00,
+            x: 0x00,
+            y: 0x00,
+            p: 0x00,
+            s: 0xFF,
+            pc: 0x0000,
         }
     }
 
     pub fn flags(&self) -> Flags {
-        Flags::from(self.P)
+        Flags::from(self.p)
     }
 
     pub fn set_flags(&mut self, flags: Flags) {
-        self.P = flags.into();
+        self.p = flags.into();
     }
 }
 
@@ -87,7 +86,7 @@ pub enum AddressingMode {
     ZeroPage(u8),
     ZeroPageX(u8),
     ZeroPageY(u8),
-    Relative(u8),
+    Relative(i8),
     Absolute(u16),
     AbsoluteX(u16),
     AbsoluteY(u16),
