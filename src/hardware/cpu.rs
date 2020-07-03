@@ -35,6 +35,7 @@ pub struct Flags {
     pub zero: bool,
     pub interrupt_disable: bool,
     pub decimal: bool,
+    pub break_command: bool,
     pub overflow: bool,
     pub negative: bool,
 }
@@ -46,6 +47,7 @@ impl From<u8> for Flags {
             zero: (value & 0x02) != 0,
             interrupt_disable: (value & 0x04) != 0,
             decimal: (value & 0x08) != 0,
+            break_command: (value & 0x10) != 0,
             overflow: (value & 0x40) != 0,
             negative: (value & 0x80) != 0,
         }
@@ -54,7 +56,7 @@ impl From<u8> for Flags {
 
 impl Into<u8> for Flags {
     fn into(self) -> u8 {
-        let mut value = 0u8;
+        let mut value = 0;
         if self.carry {
             value |= 0x01;
         }
@@ -66,6 +68,9 @@ impl Into<u8> for Flags {
         }
         if self.decimal {
             value |= 0x08;
+        }
+        if self.break_command {
+            value |= 0x10;
         }
         if self.overflow {
             value |= 0x40;

@@ -48,6 +48,16 @@ pub enum InstructionType {
     JMP,
     JSR,
     RTS,
+    RTI,
+    CLC,
+    SEC,
+    CLD,
+    SED,
+    CLI,
+    SEI,
+    CLV,
+    BRK,
+    NOP,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -331,6 +341,31 @@ impl<'a> InstructionExecutor<'a> {
                 let hi_word = stack.pop();
                 self.cpu.pc = u16::from_le_bytes([lo_word, hi_word]).wrapping_add(1);
             }
+            InstructionType::RTI => {
+                let mut stack = self.memory.stack(self.cpu);
+                let flags = Flags::from(stack.pop());
+                let lo_word = stack.pop();
+                let hi_word = stack.pop();
+                self.cpu.set_flags(flags);
+                self.cpu.pc = u16::from_le_bytes([lo_word, hi_word]);
+            }
+            InstructionType::CLC => self.cpu.set_flags(Flags { carry: false, ..self.cpu.flags() }),
+            InstructionType::SEC => self.cpu.set_flags(Flags { carry: true, ..self.cpu.flags() }),
+            InstructionType::CLD => self.cpu.set_flags(Flags { decimal: false, ..self.cpu.flags() }),
+            InstructionType::SED => self.cpu.set_flags(Flags { decimal: true, ..self.cpu.flags() }),
+            InstructionType::CLI => self.cpu.set_flags(Flags { interrupt_disable: false, ..self.cpu.flags() }),
+            InstructionType::SEI => self.cpu.set_flags(Flags { interrupt_disable: true, ..self.cpu.flags() }),
+            InstructionType::CLV => self.cpu.set_flags(Flags { overflow: false, ..self.cpu.flags() }),
+            InstructionType::BRK => {
+                let pc_address = self.cpu.pc.to_le_bytes();
+                let status = self.cpu.p;
+                let mut stack = self.memory.stack(self.cpu);
+                stack.push(pc_address[1]);
+                stack.push(pc_address[0]);
+                stack.push(status);
+                self.cpu.set_flags(Flags{ break_command: true, ..self.cpu.flags() });
+            }
+            InstructionType::NOP => (),
         }
     }
 
@@ -1199,7 +1234,7 @@ pub mod tests {
         cpu.y = 0x01;
         let mut memory = Memory::new();
         InstructionExecutor::new(&mut cpu, &mut memory)
-            .execute(Instruction::new(InstructionType::TAY, AddressingMode::Implied));
+            .execute(Instruction::new(InstructionType::TYA, AddressingMode::Implied));
         
         let flags = cpu.flags();
         assert_eq!(cpu.y, cpu.a);
@@ -1327,6 +1362,126 @@ pub mod tests {
             .execute(Instruction::new(InstructionType::RTS, AddressingMode::Implied));
 
         assert_eq!(cpu.pc, 0x0601);
+    }
+
+    #[test]
+    pub fn test_rti() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        let mut stack = memory.stack(&mut cpu);
+        stack.push(0x06);
+        stack.push(0x00);
+        stack.push(0b00000011);
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::RTI, AddressingMode::Implied));
+        
+        let flags = cpu.flags();
+        assert_eq!(cpu.pc, 0x0600);
+        assert!(flags.carry);
+        assert!(flags.zero);
+        assert!(!flags.interrupt_disable);
+        assert!(!flags.decimal);
+        assert!(!flags.overflow);
+        assert!(!flags.negative);
+    }
+
+    #[test]
+    pub fn test_clc() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        cpu.set_flags(Flags { carry: true, ..Default::default() });
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::CLC, AddressingMode::Implied));
+
+        assert!(!cpu.flags().carry);
+    }
+
+    #[test]
+    pub fn test_sec() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SEC, AddressingMode::Implied));
+
+        assert!(cpu.flags().carry);
+    }
+
+    #[test]
+    pub fn test_cld() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        cpu.set_flags(Flags { decimal: true, ..Default::default() });
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::CLD, AddressingMode::Implied));
+
+        assert!(!cpu.flags().decimal);
+    }
+
+    #[test]
+    pub fn test_sed() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SED, AddressingMode::Implied));
+
+        assert!(cpu.flags().decimal);
+    }
+
+    #[test]
+    pub fn test_cli() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        cpu.set_flags(Flags { interrupt_disable: true, ..Default::default() });
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::CLI, AddressingMode::Implied));
+
+        assert!(!cpu.flags().interrupt_disable);
+    }
+
+    #[test]
+    pub fn test_sei() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::SEI, AddressingMode::Implied));
+
+        assert!(cpu.flags().interrupt_disable);
+    }
+
+    #[test]
+    pub fn test_clv() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new();
+        cpu.set_flags(Flags { overflow: true, ..Default::default() });
+        
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::CLV, AddressingMode::Implied));
+
+        assert!(!cpu.flags().overflow);
+    }
+
+    #[test]
+    pub fn test_brk() {
+        let mut cpu = CPU::new();
+        cpu.pc = 0x0600;
+        cpu.set_flags(Flags{ carry: true, ..Default::default() });
+        let mut memory = Memory::new();
+
+        InstructionExecutor::new(&mut cpu, &mut memory)
+            .execute(Instruction::new(InstructionType::BRK, AddressingMode::Implied));
+
+        let mut stack = memory.stack(&mut cpu);
+        assert_eq!(stack.pop(), Flags{ carry: true, ..Default::default() }.into());
+        assert_eq!(stack.pop(), 0x00);
+        assert_eq!(stack.pop(), 0x06);
+        let flags = cpu.flags();
+        assert!(flags.break_command);
     }
 
     #[test]
