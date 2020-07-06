@@ -31,13 +31,7 @@ impl Memory {
     pub fn write_8_bit_value_by_mode(&mut self, cpu: &mut CPU, addressing_mode: AddressingMode, value: u8) {
         match addressing_mode {
             AddressingMode::Accumulator => cpu.a = value,
-            mode => {
-                self.write_8_bit_value(
-                    self.address_by_mode(cpu, mode)
-                        .expect("Invalid addressing mode"),
-                    value,
-                )
-            }
+            mode => self.write_8_bit_value(self.address_by_mode(cpu, mode).expect("Invalid addressing mode"), value),
         }
     }
 
@@ -74,10 +68,7 @@ pub struct Stack<'a> {
 
 impl<'a> Stack<'a> {
     pub fn new(cpu: &'a mut CPU, slice: &'a mut [u8]) -> Self {
-        Self {
-            cpu,
-            slice,
-        }
+        Self { cpu, slice }
     }
 
     pub fn push(&mut self, value: u8) {
