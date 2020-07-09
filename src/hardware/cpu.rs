@@ -101,7 +101,7 @@ pub enum AddressingMode {
 }
 
 impl AddressingMode {
-    pub fn byte_length(&self) -> u8 {
+    pub fn byte_length(&self) -> u32 {
         match self {
             AddressingMode::Implied => 1,
             AddressingMode::Accumulator => 1,

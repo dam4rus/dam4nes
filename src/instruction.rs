@@ -1,4 +1,7 @@
-use crate::hardware::{AddressingMode, Flags, Memory, Sign, CPU};
+use crate::{
+    hardware::{AddressingMode, Flags, Memory, Sign, CPU},
+    error::InvalidOpCode,
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InstructionType {
@@ -67,34 +70,317 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn from_machine_code(memory: &[u8]) -> Option<Self> {
+    pub fn from_machine_code(memory: &[u8]) -> Result<Option<Self>, InvalidOpCode> {
         match memory {
-            [0xAD, fst, snd, ..] => Some(Self::new(
+            [0x00, ..] => Ok(Some(Self::new(InstructionType::BRK, AddressingMode::Implied))),
+            [0x01, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::IndexedIndirect(*value)))),
+            [0x05, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::ZeroPage(*value)))),
+            [0x06, value, ..] => Ok(Some(Self::new(InstructionType::ASL, AddressingMode::ZeroPage(*value)))),
+            [0x08, ..] => Ok(Some(Self::new(InstructionType::PHP, AddressingMode::Implied))),
+            [0x09, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::Immediate(*value)))),
+            [0x0A, ..] => Ok(Some(Self::new(InstructionType::ASL, AddressingMode::Accumulator))),
+            [0x0D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ORA,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x0E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ASL,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x10, value, ..] => Ok(Some(Self::new(InstructionType::BPL, AddressingMode::Relative(*value as i8)))),
+            [0x11, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::IndirectIndexed(*value)))),
+            [0x15, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::ZeroPageX(*value)))),
+            [0x16, value, ..] => Ok(Some(Self::new(InstructionType::ASL, AddressingMode::ZeroPageX(*value)))),
+            [0x18, ..] => Ok(Some(Self::new(InstructionType::CLC, AddressingMode::Implied))),
+            [0x19, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ORA,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x1D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ORA,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x1E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ASL,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x20, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::JSR,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x21, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::IndexedIndirect(*value)))),
+            [0x24, value, ..] => Ok(Some(Self::new(InstructionType::BIT, AddressingMode::ZeroPage(*value)))),
+            [0x25, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::ZeroPage(*value)))),
+            [0x26, value, ..] => Ok(Some(Self::new(InstructionType::ROL, AddressingMode::ZeroPage(*value)))),
+            [0x28, ..] => Ok(Some(Self::new(InstructionType::PLP, AddressingMode::Implied))),
+            [0x29, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::Immediate(*value)))),
+            [0x2A, ..] => Ok(Some(Self::new(InstructionType::ROL, AddressingMode::Accumulator))),
+            [0x2C, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::BIT,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x2D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::AND,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x2E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ROL,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x30, value, ..] => Ok(Some(Self::new(InstructionType::BMI, AddressingMode::Relative(*value as i8)))),
+            [0x31, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::IndirectIndexed(*value)))),
+            [0x35, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::ZeroPageX(*value)))),
+            [0x36, value, ..] => Ok(Some(Self::new(InstructionType::ROL, AddressingMode::ZeroPageX(*value)))),
+            [0x38, ..] => Ok(Some(Self::new(InstructionType::SEC, AddressingMode::Implied))),
+            [0x39, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::AND,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x3D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::AND,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x3E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ROL,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x40, ..] => Ok(Some(Self::new(InstructionType::RTI, AddressingMode::Implied))),
+            [0x41, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::IndexedIndirect(*value)))),
+            [0x45, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::ZeroPage(*value)))),
+            [0x46, value, ..] => Ok(Some(Self::new(InstructionType::LSR, AddressingMode::ZeroPage(*value)))),
+            [0x48, ..] => Ok(Some(Self::new(InstructionType::PHA, AddressingMode::Implied))),
+            [0x49, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::Immediate(*value)))),
+            [0x4A, ..] => Ok(Some(Self::new(InstructionType::LSR, AddressingMode::Accumulator))),
+            [0x4C, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::JMP,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x4D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::EOR,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x4E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LSR,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x50, value, ..] => Ok(Some(Self::new(InstructionType::BVC, AddressingMode::Relative(*value as i8)))),
+            [0x51, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::IndirectIndexed(*value)))),
+            [0x55, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::ZeroPageX(*value)))),
+            [0x56, value, ..] => Ok(Some(Self::new(InstructionType::LSR, AddressingMode::ZeroPageX(*value)))),
+            [0x58, ..] => Ok(Some(Self::new(InstructionType::CLI, AddressingMode::Implied))),
+            [0x59, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::EOR,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x5D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::EOR,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x5E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LSR,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x60, ..] => Ok(Some(Self::new(InstructionType::RTS, AddressingMode::Implied))),
+            [0x61, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::IndexedIndirect(*value)))),
+            [0x65, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::ZeroPage(*value)))),
+            [0x66, value, ..] => Ok(Some(Self::new(InstructionType::ROR, AddressingMode::ZeroPage(*value)))),
+            [0x68, ..] => Ok(Some(Self::new(InstructionType::PLA, AddressingMode::Implied))),
+            [0x69, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::Immediate(*value)))),
+            [0x6A, ..] => Ok(Some(Self::new(InstructionType::ROR, AddressingMode::Accumulator))),
+            [0x6C, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::JMP,
+                AddressingMode::Indirect(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x6D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ADC,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x6E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ROR,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x70, value, ..] => Ok(Some(Self::new(InstructionType::BVS, AddressingMode::Relative(*value as i8)))),
+            [0x71, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::IndirectIndexed(*value)))),
+            [0x75, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::ZeroPageX(*value)))),
+            [0x76, value, ..] => Ok(Some(Self::new(InstructionType::ROR, AddressingMode::ZeroPageX(*value)))),
+            [0x78, ..] => Ok(Some(Self::new(InstructionType::SEI, AddressingMode::Implied))),
+            [0x79, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ADC,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x7D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ADC,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x7E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::ROR,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x81, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::IndexedIndirect(*value)))),
+            [0x84, value, ..] => Ok(Some(Self::new(InstructionType::STY, AddressingMode::ZeroPage(*value)))),
+            [0x85, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::ZeroPage(*value)))),
+            [0x86, value, ..] => Ok(Some(Self::new(InstructionType::STX, AddressingMode::ZeroPage(*value)))),
+            [0x88, ..] => Ok(Some(Self::new(InstructionType::DEY, AddressingMode::Implied))),
+            [0x8A, ..] => Ok(Some(Self::new(InstructionType::TXA, AddressingMode::Implied))),
+            [0x8C, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::STY,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x8D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::STA,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x8E, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::STX,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x90, value, ..] => Ok(Some(Self::new(InstructionType::BCC, AddressingMode::Relative(*value as i8)))),
+            [0x91, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::IndirectIndexed(*value)))),
+            [0x94, value, ..] => Ok(Some(Self::new(InstructionType::STY, AddressingMode::ZeroPageX(*value)))),
+            [0x95, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::ZeroPageX(*value)))),
+            [0x96, value, ..] => Ok(Some(Self::new(InstructionType::STX, AddressingMode::ZeroPageY(*value)))),
+            [0x98, ..] => Ok(Some(Self::new(InstructionType::TYA, AddressingMode::Implied))),
+            [0x99, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::STA,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0x9A, ..] => Ok(Some(Self::new(InstructionType::TXS, AddressingMode::Implied))),
+            [0x9D, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::STA,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xA0, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::Immediate(*value)))),
+            [0xA1, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::IndexedIndirect(*value)))),
+            [0xA2, value, ..] => Ok(Some(Self::new(InstructionType::LDX, AddressingMode::Immediate(*value)))),
+            [0xA4, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::ZeroPage(*value)))),
+            [0xA5, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPage(*value)))),
+            [0xA6, value, ..] => Ok(Some(Self::new(InstructionType::LDX, AddressingMode::ZeroPage(*value)))),
+            [0xA8, ..] => Ok(Some(Self::new(InstructionType::TAY, AddressingMode::Implied))),
+            [0xA9, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::Immediate(*value)))),
+            [0xAA, ..] => Ok(Some(Self::new(InstructionType::TAX, AddressingMode::Implied))),
+            [0xAC, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LDY,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xAD, fst, snd, ..] => Ok(Some(Self::new(
                 InstructionType::LDA,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
-            )),
-            [0xBD, fst, snd, ..] => Some(Self::new(
-                InstructionType::LDA,
-                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
-            )),
-            [0xB9, fst, snd, ..] => Some(Self::new(
+            ))),
+            [0xAE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LDX,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xB0, value, ..] => Ok(Some(Self::new(InstructionType::BCS, AddressingMode::Relative(*value as i8)))),
+            [0xB1, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::IndirectIndexed(*value)))),
+            [0xB4, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::ZeroPageX(*value)))),
+            [0xB5, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPageX(*value)))),
+            [0xB6, value, ..] => Ok(Some(Self::new(InstructionType::LDX, AddressingMode::ZeroPageY(*value)))),
+            [0xB8, ..] => Ok(Some(Self::new(InstructionType::CLV, AddressingMode::Implied))),
+            [0xB9, fst, snd, ..] => Ok(Some(Self::new(
                 InstructionType::LDA,
                 AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
-            )),
-            [0xA9, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::Immediate(*value))),
-            [0xA5, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPage(*value))),
-            [0xA1, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::IndexedIndirect(*value))),
-            [0xB5, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPageX(*value))),
-            [0xB1, value, ..] => Some(Self::new(InstructionType::LDA, AddressingMode::IndirectIndexed(*value))),
-            _ => None,
+            ))),
+            [0xBA, ..] => Ok(Some(Self::new(InstructionType::TSX, AddressingMode::Implied))),
+            [0xBC, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LDY,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xBD, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xBE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::LDX,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xC0, value, ..] => Ok(Some(Self::new(InstructionType::CPY, AddressingMode::Immediate(*value)))),
+            [0xC1, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::IndexedIndirect(*value)))),
+            [0xC4, value, ..] => Ok(Some(Self::new(InstructionType::CPY, AddressingMode::ZeroPage(*value)))),
+            [0xC5, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::ZeroPage(*value)))),
+            [0xC6, value, ..] => Ok(Some(Self::new(InstructionType::DEC, AddressingMode::ZeroPage(*value)))),
+            [0xC8, ..] => Ok(Some(Self::new(InstructionType::INY, AddressingMode::Implied))),
+            [0xC9, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::Immediate(*value)))),
+            [0xCA, ..] => Ok(Some(Self::new(InstructionType::DEX, AddressingMode::Implied))),
+            [0xCC, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::CPY,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xCD, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::CMP,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xCE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::DEC,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xD0, value, ..] => Ok(Some(Self::new(InstructionType::BNE, AddressingMode::Relative(*value as i8)))),
+            [0xD1, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::IndirectIndexed(*value)))),
+            [0xD5, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::ZeroPageX(*value)))),
+            [0xD6, value, ..] => Ok(Some(Self::new(InstructionType::DEC, AddressingMode::ZeroPageX(*value)))),
+            [0xD8, ..] => Ok(Some(Self::new(InstructionType::CLD, AddressingMode::Implied))),
+            [0xD9, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::CMP,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xDD, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::CMP,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xDE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::DEC,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xE0, value, ..] => Ok(Some(Self::new(InstructionType::CPX, AddressingMode::Immediate(*value)))),
+            [0xE1, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::IndexedIndirect(*value)))),
+            [0xE4, value, ..] => Ok(Some(Self::new(InstructionType::CPX, AddressingMode::ZeroPage(*value)))),
+            [0xE5, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::ZeroPage(*value)))),
+            [0xE6, value, ..] => Ok(Some(Self::new(InstructionType::INC, AddressingMode::ZeroPage(*value)))),
+            [0xE8, ..] => Ok(Some(Self::new(InstructionType::INX, AddressingMode::Implied))),
+            [0xE9, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::Immediate(*value)))),
+            [0xEA, ..] => Ok(Some(Self::new(InstructionType::NOP, AddressingMode::Implied))),
+            [0xEC, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::CPX,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xED, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::SBC,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xEE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::INC,
+                AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xF0, value, ..] => Ok(Some(Self::new(InstructionType::BEQ, AddressingMode::Relative(*value as i8)))),
+            [0xF1, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::IndirectIndexed(*value)))),
+            [0xF5, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::ZeroPageX(*value)))),
+            [0xF6, value, ..] => Ok(Some(Self::new(InstructionType::INC, AddressingMode::ZeroPageX(*value)))),
+            [0xF8, ..] => Ok(Some(Self::new(InstructionType::SED, AddressingMode::Implied))),
+            [0xF9, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::SBC,
+                AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xFD, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::SBC,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [0xFE, fst, snd, ..] => Ok(Some(Self::new(
+                InstructionType::INC,
+                AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
+            ))),
+            [op_code, ..] => Err(InvalidOpCode::new(*op_code)),
+            _ => Ok(None),
         }
     }
 
-    pub fn new(instruction_type: InstructionType, addressing_mode: AddressingMode) -> Self {
+    fn new(instruction_type: InstructionType, addressing_mode: AddressingMode) -> Self {
         Self {
             instruction_type,
             addressing_mode,
         }
+    }
+
+    pub fn byte_length(&self) -> u32 {
+        self.addressing_mode.byte_length()
     }
 }
 
@@ -458,7 +744,10 @@ impl<'a> InstructionExecutor<'a> {
 #[cfg(test)]
 pub mod tests {
     use super::{Instruction, InstructionExecutor, InstructionType};
-    use crate::hardware::{AddressingMode, Flags, Memory, CPU};
+    use crate::{
+        hardware::{AddressingMode, Flags, Memory, CPU},
+        error::InvalidOpCode,
+    };
 
     #[test]
     pub fn test_adc() {
@@ -1551,73 +1840,85 @@ pub mod tests {
 
     #[test]
     pub fn test_lda_absolute_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xAD, 0x10, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xAD, 0x10, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::Absolute(0xD010))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::Absolute(0xD010)))
         );
     }
 
     #[test]
     pub fn test_lda_absolute_x_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xBD, 0x10, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xBD, 0x10, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteX(0xD010))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteX(0xD010)))
         );
     }
 
     #[test]
     pub fn test_lda_absolute_y_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xB9, 0x10, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xB9, 0x10, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteY(0xD010))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteY(0xD010)))
         );
     }
 
     #[test]
     pub fn test_lda_immediate_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xA9, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xA9, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0xD0))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0xD0)))
         );
     }
 
     #[test]
     pub fn test_lda_zero_page_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xA5, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xA5, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::ZeroPage(0xD0))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::ZeroPage(0xD0)))
         );
     }
 
     #[test]
     pub fn test_lda_indexed_indirect_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xA1, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xA1, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::IndexedIndirect(0xD0))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::IndexedIndirect(0xD0)))
         );
     }
 
     #[test]
     pub fn test_lda_zero_page_x_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xB5, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xB5, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::ZeroPageX(0xD0))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::ZeroPageX(0xD0)))
         );
     }
 
     #[test]
     pub fn test_lda_indirect_indexed_from_machine_node() {
-        let lda = Instruction::from_machine_code(&[0xB1, 0xD0]).expect("Invalid machine code");
+        let lda = Instruction::from_machine_code(&[0xB1, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Instruction::new(InstructionType::LDA, AddressingMode::IndirectIndexed(0xD0))
+            Some(Instruction::new(InstructionType::LDA, AddressingMode::IndirectIndexed(0xD0)))
         );
+    }
+
+    #[test]
+    pub fn test_invalid_machine_code() {
+        let error = Instruction::from_machine_code(&[0xFF]).unwrap_err();
+        assert_eq!(error, InvalidOpCode::new(0xFF));
+    }
+
+    #[test]
+    pub fn test_empty_machine_code() {
+        let empty = Instruction::from_machine_code(&[]).unwrap();
+        assert_eq!(empty, None);
     }
 }
