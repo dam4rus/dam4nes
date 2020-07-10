@@ -1,5 +1,5 @@
-const PRG_PAGE_SIZE: usize = 16 * 1024;
-const CRH_PAGE_SIZE: usize = 8 * 1024;
+pub(crate) const PRG_PAGE_SIZE: usize = 16 * 1024;
+pub(crate) const CRH_PAGE_SIZE: usize = 8 * 1024;
 
 #[derive(Debug, Default)]
 pub struct ROM<'a> {

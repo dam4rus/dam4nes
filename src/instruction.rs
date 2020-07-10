@@ -1,6 +1,6 @@
 use crate::{
-    hardware::{AddressingMode, Flags, Memory, Sign, CPU},
     error::InvalidOpCode,
+    hardware::{AddressingMode, Flags, Memory, Sign, CPU},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -63,6 +63,23 @@ pub enum InstructionType {
     NOP,
 }
 
+impl InstructionType {
+    pub fn increments_pc(&self) -> bool {
+        match self {
+            InstructionType::JMP | InstructionType::JSR | InstructionType::RTS | InstructionType::RTI => false,
+            // | InstructionType::BCC
+            // | InstructionType::BCS
+            // | InstructionType::BNE
+            // | InstructionType::BEQ
+            // | InstructionType::BPL
+            // | InstructionType::BMI
+            // | InstructionType::BVC
+            // | InstructionType::BVS => true,
+            _ => true,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Instruction {
     instruction_type: InstructionType,
@@ -73,7 +90,10 @@ impl Instruction {
     pub fn from_machine_code(memory: &[u8]) -> Result<Option<Self>, InvalidOpCode> {
         match memory {
             [0x00, ..] => Ok(Some(Self::new(InstructionType::BRK, AddressingMode::Implied))),
-            [0x01, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::IndexedIndirect(*value)))),
+            [0x01, value, ..] => Ok(Some(Self::new(
+                InstructionType::ORA,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0x05, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::ZeroPage(*value)))),
             [0x06, value, ..] => Ok(Some(Self::new(InstructionType::ASL, AddressingMode::ZeroPage(*value)))),
             [0x08, ..] => Ok(Some(Self::new(InstructionType::PHP, AddressingMode::Implied))),
@@ -87,8 +107,14 @@ impl Instruction {
                 InstructionType::ASL,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x10, value, ..] => Ok(Some(Self::new(InstructionType::BPL, AddressingMode::Relative(*value as i8)))),
-            [0x11, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::IndirectIndexed(*value)))),
+            [0x10, value, ..] => Ok(Some(Self::new(
+                InstructionType::BPL,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0x11, value, ..] => Ok(Some(Self::new(
+                InstructionType::ORA,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0x15, value, ..] => Ok(Some(Self::new(InstructionType::ORA, AddressingMode::ZeroPageX(*value)))),
             [0x16, value, ..] => Ok(Some(Self::new(InstructionType::ASL, AddressingMode::ZeroPageX(*value)))),
             [0x18, ..] => Ok(Some(Self::new(InstructionType::CLC, AddressingMode::Implied))),
@@ -108,7 +134,10 @@ impl Instruction {
                 InstructionType::JSR,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x21, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::IndexedIndirect(*value)))),
+            [0x21, value, ..] => Ok(Some(Self::new(
+                InstructionType::AND,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0x24, value, ..] => Ok(Some(Self::new(InstructionType::BIT, AddressingMode::ZeroPage(*value)))),
             [0x25, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::ZeroPage(*value)))),
             [0x26, value, ..] => Ok(Some(Self::new(InstructionType::ROL, AddressingMode::ZeroPage(*value)))),
@@ -127,8 +156,14 @@ impl Instruction {
                 InstructionType::ROL,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x30, value, ..] => Ok(Some(Self::new(InstructionType::BMI, AddressingMode::Relative(*value as i8)))),
-            [0x31, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::IndirectIndexed(*value)))),
+            [0x30, value, ..] => Ok(Some(Self::new(
+                InstructionType::BMI,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0x31, value, ..] => Ok(Some(Self::new(
+                InstructionType::AND,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0x35, value, ..] => Ok(Some(Self::new(InstructionType::AND, AddressingMode::ZeroPageX(*value)))),
             [0x36, value, ..] => Ok(Some(Self::new(InstructionType::ROL, AddressingMode::ZeroPageX(*value)))),
             [0x38, ..] => Ok(Some(Self::new(InstructionType::SEC, AddressingMode::Implied))),
@@ -145,7 +180,10 @@ impl Instruction {
                 AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
             ))),
             [0x40, ..] => Ok(Some(Self::new(InstructionType::RTI, AddressingMode::Implied))),
-            [0x41, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::IndexedIndirect(*value)))),
+            [0x41, value, ..] => Ok(Some(Self::new(
+                InstructionType::EOR,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0x45, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::ZeroPage(*value)))),
             [0x46, value, ..] => Ok(Some(Self::new(InstructionType::LSR, AddressingMode::ZeroPage(*value)))),
             [0x48, ..] => Ok(Some(Self::new(InstructionType::PHA, AddressingMode::Implied))),
@@ -163,8 +201,14 @@ impl Instruction {
                 InstructionType::LSR,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x50, value, ..] => Ok(Some(Self::new(InstructionType::BVC, AddressingMode::Relative(*value as i8)))),
-            [0x51, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::IndirectIndexed(*value)))),
+            [0x50, value, ..] => Ok(Some(Self::new(
+                InstructionType::BVC,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0x51, value, ..] => Ok(Some(Self::new(
+                InstructionType::EOR,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0x55, value, ..] => Ok(Some(Self::new(InstructionType::EOR, AddressingMode::ZeroPageX(*value)))),
             [0x56, value, ..] => Ok(Some(Self::new(InstructionType::LSR, AddressingMode::ZeroPageX(*value)))),
             [0x58, ..] => Ok(Some(Self::new(InstructionType::CLI, AddressingMode::Implied))),
@@ -181,7 +225,10 @@ impl Instruction {
                 AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
             ))),
             [0x60, ..] => Ok(Some(Self::new(InstructionType::RTS, AddressingMode::Implied))),
-            [0x61, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::IndexedIndirect(*value)))),
+            [0x61, value, ..] => Ok(Some(Self::new(
+                InstructionType::ADC,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0x65, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::ZeroPage(*value)))),
             [0x66, value, ..] => Ok(Some(Self::new(InstructionType::ROR, AddressingMode::ZeroPage(*value)))),
             [0x68, ..] => Ok(Some(Self::new(InstructionType::PLA, AddressingMode::Implied))),
@@ -199,8 +246,14 @@ impl Instruction {
                 InstructionType::ROR,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x70, value, ..] => Ok(Some(Self::new(InstructionType::BVS, AddressingMode::Relative(*value as i8)))),
-            [0x71, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::IndirectIndexed(*value)))),
+            [0x70, value, ..] => Ok(Some(Self::new(
+                InstructionType::BVS,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0x71, value, ..] => Ok(Some(Self::new(
+                InstructionType::ADC,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0x75, value, ..] => Ok(Some(Self::new(InstructionType::ADC, AddressingMode::ZeroPageX(*value)))),
             [0x76, value, ..] => Ok(Some(Self::new(InstructionType::ROR, AddressingMode::ZeroPageX(*value)))),
             [0x78, ..] => Ok(Some(Self::new(InstructionType::SEI, AddressingMode::Implied))),
@@ -216,7 +269,10 @@ impl Instruction {
                 InstructionType::ROR,
                 AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x81, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::IndexedIndirect(*value)))),
+            [0x81, value, ..] => Ok(Some(Self::new(
+                InstructionType::STA,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0x84, value, ..] => Ok(Some(Self::new(InstructionType::STY, AddressingMode::ZeroPage(*value)))),
             [0x85, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::ZeroPage(*value)))),
             [0x86, value, ..] => Ok(Some(Self::new(InstructionType::STX, AddressingMode::ZeroPage(*value)))),
@@ -234,8 +290,14 @@ impl Instruction {
                 InstructionType::STX,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0x90, value, ..] => Ok(Some(Self::new(InstructionType::BCC, AddressingMode::Relative(*value as i8)))),
-            [0x91, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::IndirectIndexed(*value)))),
+            [0x90, value, ..] => Ok(Some(Self::new(
+                InstructionType::BCC,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0x91, value, ..] => Ok(Some(Self::new(
+                InstructionType::STA,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0x94, value, ..] => Ok(Some(Self::new(InstructionType::STY, AddressingMode::ZeroPageX(*value)))),
             [0x95, value, ..] => Ok(Some(Self::new(InstructionType::STA, AddressingMode::ZeroPageX(*value)))),
             [0x96, value, ..] => Ok(Some(Self::new(InstructionType::STX, AddressingMode::ZeroPageY(*value)))),
@@ -250,7 +312,10 @@ impl Instruction {
                 AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
             ))),
             [0xA0, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::Immediate(*value)))),
-            [0xA1, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::IndexedIndirect(*value)))),
+            [0xA1, value, ..] => Ok(Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0xA2, value, ..] => Ok(Some(Self::new(InstructionType::LDX, AddressingMode::Immediate(*value)))),
             [0xA4, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::ZeroPage(*value)))),
             [0xA5, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPage(*value)))),
@@ -270,8 +335,14 @@ impl Instruction {
                 InstructionType::LDX,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0xB0, value, ..] => Ok(Some(Self::new(InstructionType::BCS, AddressingMode::Relative(*value as i8)))),
-            [0xB1, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::IndirectIndexed(*value)))),
+            [0xB0, value, ..] => Ok(Some(Self::new(
+                InstructionType::BCS,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0xB1, value, ..] => Ok(Some(Self::new(
+                InstructionType::LDA,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0xB4, value, ..] => Ok(Some(Self::new(InstructionType::LDY, AddressingMode::ZeroPageX(*value)))),
             [0xB5, value, ..] => Ok(Some(Self::new(InstructionType::LDA, AddressingMode::ZeroPageX(*value)))),
             [0xB6, value, ..] => Ok(Some(Self::new(InstructionType::LDX, AddressingMode::ZeroPageY(*value)))),
@@ -294,7 +365,10 @@ impl Instruction {
                 AddressingMode::AbsoluteY(u16::from_le_bytes([*fst, *snd])),
             ))),
             [0xC0, value, ..] => Ok(Some(Self::new(InstructionType::CPY, AddressingMode::Immediate(*value)))),
-            [0xC1, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::IndexedIndirect(*value)))),
+            [0xC1, value, ..] => Ok(Some(Self::new(
+                InstructionType::CMP,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0xC4, value, ..] => Ok(Some(Self::new(InstructionType::CPY, AddressingMode::ZeroPage(*value)))),
             [0xC5, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::ZeroPage(*value)))),
             [0xC6, value, ..] => Ok(Some(Self::new(InstructionType::DEC, AddressingMode::ZeroPage(*value)))),
@@ -313,8 +387,14 @@ impl Instruction {
                 InstructionType::DEC,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0xD0, value, ..] => Ok(Some(Self::new(InstructionType::BNE, AddressingMode::Relative(*value as i8)))),
-            [0xD1, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::IndirectIndexed(*value)))),
+            [0xD0, value, ..] => Ok(Some(Self::new(
+                InstructionType::BNE,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0xD1, value, ..] => Ok(Some(Self::new(
+                InstructionType::CMP,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0xD5, value, ..] => Ok(Some(Self::new(InstructionType::CMP, AddressingMode::ZeroPageX(*value)))),
             [0xD6, value, ..] => Ok(Some(Self::new(InstructionType::DEC, AddressingMode::ZeroPageX(*value)))),
             [0xD8, ..] => Ok(Some(Self::new(InstructionType::CLD, AddressingMode::Implied))),
@@ -331,7 +411,10 @@ impl Instruction {
                 AddressingMode::AbsoluteX(u16::from_le_bytes([*fst, *snd])),
             ))),
             [0xE0, value, ..] => Ok(Some(Self::new(InstructionType::CPX, AddressingMode::Immediate(*value)))),
-            [0xE1, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::IndexedIndirect(*value)))),
+            [0xE1, value, ..] => Ok(Some(Self::new(
+                InstructionType::SBC,
+                AddressingMode::IndexedIndirect(*value),
+            ))),
             [0xE4, value, ..] => Ok(Some(Self::new(InstructionType::CPX, AddressingMode::ZeroPage(*value)))),
             [0xE5, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::ZeroPage(*value)))),
             [0xE6, value, ..] => Ok(Some(Self::new(InstructionType::INC, AddressingMode::ZeroPage(*value)))),
@@ -350,8 +433,14 @@ impl Instruction {
                 InstructionType::INC,
                 AddressingMode::Absolute(u16::from_le_bytes([*fst, *snd])),
             ))),
-            [0xF0, value, ..] => Ok(Some(Self::new(InstructionType::BEQ, AddressingMode::Relative(*value as i8)))),
-            [0xF1, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::IndirectIndexed(*value)))),
+            [0xF0, value, ..] => Ok(Some(Self::new(
+                InstructionType::BEQ,
+                AddressingMode::Relative(*value as i8),
+            ))),
+            [0xF1, value, ..] => Ok(Some(Self::new(
+                InstructionType::SBC,
+                AddressingMode::IndirectIndexed(*value),
+            ))),
             [0xF5, value, ..] => Ok(Some(Self::new(InstructionType::SBC, AddressingMode::ZeroPageX(*value)))),
             [0xF6, value, ..] => Ok(Some(Self::new(InstructionType::INC, AddressingMode::ZeroPageX(*value)))),
             [0xF8, ..] => Ok(Some(Self::new(InstructionType::SED, AddressingMode::Implied))),
@@ -378,19 +467,15 @@ impl Instruction {
             addressing_mode,
         }
     }
-
-    pub fn byte_length(&self) -> u32 {
-        self.addressing_mode.byte_length()
-    }
 }
 
-pub struct InstructionExecutor<'a> {
+pub struct InstructionExecutor<'a, 'b> {
     cpu: &'a mut CPU,
-    memory: &'a mut Memory,
+    memory: &'a mut Memory<'b>,
 }
 
-impl<'a> InstructionExecutor<'a> {
-    pub fn new(cpu: &'a mut CPU, memory: &'a mut Memory) -> Self {
+impl<'a, 'b> InstructionExecutor<'a, 'b> {
+    pub fn new(cpu: &'a mut CPU, memory: &'a mut Memory<'b>) -> Self {
         Self { cpu, memory }
     }
 
@@ -678,6 +763,10 @@ impl<'a> InstructionExecutor<'a> {
             }
             InstructionType::NOP => (),
         }
+
+        if instruction.instruction_type.increments_pc() {
+            self.cpu.pc += instruction.addressing_mode.byte_length() as u16;
+        }
     }
 
     fn read_8_bit_value(&self, instruction: Instruction) -> u8 {
@@ -745,8 +834,8 @@ impl<'a> InstructionExecutor<'a> {
 pub mod tests {
     use super::{Instruction, InstructionExecutor, InstructionType};
     use crate::{
-        hardware::{AddressingMode, Flags, Memory, CPU},
         error::InvalidOpCode,
+        hardware::{AddressingMode, Flags, Memory, CPU},
     };
 
     #[test]
@@ -1852,7 +1941,10 @@ pub mod tests {
         let lda = Instruction::from_machine_code(&[0xBD, 0x10, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Some(Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteX(0xD010)))
+            Some(Instruction::new(
+                InstructionType::LDA,
+                AddressingMode::AbsoluteX(0xD010)
+            ))
         );
     }
 
@@ -1861,7 +1953,10 @@ pub mod tests {
         let lda = Instruction::from_machine_code(&[0xB9, 0x10, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Some(Instruction::new(InstructionType::LDA, AddressingMode::AbsoluteY(0xD010)))
+            Some(Instruction::new(
+                InstructionType::LDA,
+                AddressingMode::AbsoluteY(0xD010)
+            ))
         );
     }
 
@@ -1888,7 +1983,10 @@ pub mod tests {
         let lda = Instruction::from_machine_code(&[0xA1, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Some(Instruction::new(InstructionType::LDA, AddressingMode::IndexedIndirect(0xD0)))
+            Some(Instruction::new(
+                InstructionType::LDA,
+                AddressingMode::IndexedIndirect(0xD0)
+            ))
         );
     }
 
@@ -1906,7 +2004,10 @@ pub mod tests {
         let lda = Instruction::from_machine_code(&[0xB1, 0xD0]).unwrap();
         assert_eq!(
             lda,
-            Some(Instruction::new(InstructionType::LDA, AddressingMode::IndirectIndexed(0xD0)))
+            Some(Instruction::new(
+                InstructionType::LDA,
+                AddressingMode::IndirectIndexed(0xD0)
+            ))
         );
     }
 

@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fmt::{Formatter, Result, Display},
+    fmt::{Display, Formatter, Result},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
