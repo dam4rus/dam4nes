@@ -1,6 +1,9 @@
 use crate::{
     error::InvalidOpCode,
-    hardware::{AddressingMode, Flags, Memory, Sign, CPU},
+    hardware::{
+        cpu::{AddressingMode, Flags, Sign, MMU},
+        memory::Stack,
+    },
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -469,63 +472,70 @@ impl Instruction {
     }
 }
 
-pub struct InstructionExecutor<'a, 'b> {
-    cpu: &'a mut CPU,
-    memory: &'a mut Memory<'b>,
+pub struct InstructionExecutor<'a, 'mmu, 'mapped> {
+    mmu: &'a mut MMU<'mmu, 'mapped>,
 }
 
-impl<'a, 'b> InstructionExecutor<'a, 'b> {
-    pub fn new(cpu: &'a mut CPU, memory: &'a mut Memory<'b>) -> Self {
-        Self { cpu, memory }
+impl<'a, 'mmu, 'mapped> InstructionExecutor<'a, 'mmu, 'mapped> {
+    pub fn new(mmu: &'a mut MMU<'mmu, 'mapped>) -> Self {
+        Self { mmu }
     }
 
     pub fn execute(&mut self, instruction: Instruction) {
+        println!("Executing {:?}", instruction);
         match instruction.instruction_type {
             InstructionType::ADC => {
-                let old_accumulator = self.cpu.a;
                 let value = self.read_8_bit_value(instruction);
-                let status_flags = self.cpu.flags();
-                let carried = if status_flags.carry { 1 } else { 0 };
-                self.cpu.a = self.cpu.a.wrapping_add(value).wrapping_add(carried);
+                let registers = &self.mmu.cpu().registers;
+                let old_accumulator = registers.a;
+                let carried = if registers.flags().carry { 1 } else { 0 };
+                let new_accumulator = old_accumulator.wrapping_add(value).wrapping_add(carried);
+                self.mmu.cpu_mut().registers.a = new_accumulator;
 
-                self.update_flags_after_arithmetic(old_accumulator, value, self.cpu.a < old_accumulator);
+                self.update_flags_after_arithmetic(old_accumulator, value, new_accumulator < old_accumulator);
             }
             InstructionType::SBC => {
-                let old_accumulator = self.cpu.a;
                 let value = self.read_8_bit_value(instruction);
-                let status_flags = self.cpu.flags();
-                let carried = if status_flags.carry { 1 } else { 0 };
-                self.cpu.a = self.cpu.a.wrapping_sub(value).wrapping_sub(carried);
+                let registers = &self.mmu.cpu().registers;
+                let old_accumulator = registers.a;
+                let carried = if registers.flags().carry { 1 } else { 0 };
+                let new_accumulator = old_accumulator.wrapping_sub(value).wrapping_sub(carried);
+                self.mmu.cpu_mut().registers.a = new_accumulator;
 
-                self.update_flags_after_arithmetic(old_accumulator, value, self.cpu.a > old_accumulator);
+                self.update_flags_after_arithmetic(old_accumulator, value, new_accumulator > old_accumulator);
             }
             InstructionType::LDA => {
-                self.cpu.a = self.read_8_bit_value(instruction);
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let value = self.read_8_bit_value(instruction);
+                self.mmu.cpu_mut().registers.a = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::LDX => {
-                self.cpu.x = self.read_8_bit_value(instruction);
-                self.update_zero_and_negative_flags(self.cpu.x);
+                let value = self.read_8_bit_value(instruction);
+                self.mmu.cpu_mut().registers.x = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::LDY => {
-                self.cpu.y = self.read_8_bit_value(instruction);
-                self.update_zero_and_negative_flags(self.cpu.y);
+                let value = self.read_8_bit_value(instruction);
+                self.mmu.cpu_mut().registers.y = value;
+                self.update_zero_and_negative_flags(value);
             }
-            InstructionType::STA => self.write_8_bit_value(instruction, self.cpu.a),
-            InstructionType::STX => self.write_8_bit_value(instruction, self.cpu.x),
-            InstructionType::STY => self.write_8_bit_value(instruction, self.cpu.y),
+            InstructionType::STA => self.write_8_bit_value(instruction, self.mmu.cpu().registers.a),
+            InstructionType::STX => self.write_8_bit_value(instruction, self.mmu.cpu().registers.x),
+            InstructionType::STY => self.write_8_bit_value(instruction, self.mmu.cpu().registers.y),
             InstructionType::INC => {
                 let value = self.read_8_bit_value(instruction).wrapping_add(1);
                 self.write_8_bit_value(instruction, value);
                 self.update_zero_and_negative_flags(value);
             }
             InstructionType::INX => {
-                self.cpu.x = self.cpu.x.wrapping_add(1);
-                self.update_zero_and_negative_flags(self.cpu.x);
+                let value = self.mmu.cpu().registers.x.wrapping_add(1);
+                self.mmu.cpu_mut().registers.x = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::INY => {
-                self.cpu.y = self.cpu.y.wrapping_add(1);
-                self.update_zero_and_negative_flags(self.cpu.y);
+                let value = self.mmu.cpu().registers.y.wrapping_add(1);
+                self.mmu.cpu_mut().registers.y = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::DEC => {
                 let value = self.read_8_bit_value(instruction).wrapping_sub(1);
@@ -533,12 +543,14 @@ impl<'a, 'b> InstructionExecutor<'a, 'b> {
                 self.update_zero_and_negative_flags(value);
             }
             InstructionType::DEX => {
-                self.cpu.x = self.cpu.x.wrapping_sub(1);
-                self.update_zero_and_negative_flags(self.cpu.x);
+                let value = self.mmu.cpu().registers.x.wrapping_sub(1);
+                self.mmu.cpu_mut().registers.x = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::DEY => {
-                self.cpu.y = self.cpu.y.wrapping_sub(1);
-                self.update_zero_and_negative_flags(self.cpu.y);
+                let value = self.mmu.cpu().registers.y.wrapping_sub(1);
+                self.mmu.cpu_mut().registers.y = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::ASL => {
                 let old_value = self.read_8_bit_value(instruction);
@@ -554,7 +566,7 @@ impl<'a, 'b> InstructionExecutor<'a, 'b> {
             }
             InstructionType::ROL => {
                 let old_value = self.read_8_bit_value(instruction);
-                let value = if self.cpu.flags().carry {
+                let value = if self.mmu.cpu().registers.flags().carry {
                     (old_value << 1) | 0b00000001
                 } else {
                     old_value << 1
@@ -564,7 +576,7 @@ impl<'a, 'b> InstructionExecutor<'a, 'b> {
             }
             InstructionType::ROR => {
                 let old_value = self.read_8_bit_value(instruction);
-                let value = if self.cpu.flags().carry {
+                let value = if self.mmu.cpu().registers.flags().carry {
                     (old_value >> 1) | 0b10000000
                 } else {
                     old_value >> 1
@@ -574,255 +586,303 @@ impl<'a, 'b> InstructionExecutor<'a, 'b> {
             }
             InstructionType::AND => {
                 let value = self.read_8_bit_value(instruction);
-                self.cpu.a = self.cpu.a & value;
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let new_accumulator = self.mmu.cpu().registers.a & value;
+                self.mmu.cpu_mut().registers.a = new_accumulator;
+                self.update_zero_and_negative_flags(new_accumulator);
             }
             InstructionType::ORA => {
                 let value = self.read_8_bit_value(instruction);
-                self.cpu.a = self.cpu.a | value;
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let new_accumulator = self.mmu.cpu().registers.a | value;
+                self.mmu.cpu_mut().registers.a = new_accumulator;
+                self.update_zero_and_negative_flags(new_accumulator);
             }
             InstructionType::EOR => {
                 let value = self.read_8_bit_value(instruction);
-                self.cpu.a = self.cpu.a ^ value;
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let new_accumulator = self.mmu.cpu().registers.a ^ value;
+                self.mmu.cpu_mut().registers.a = new_accumulator;
+                self.update_zero_and_negative_flags(new_accumulator);
             }
             InstructionType::CMP => {
                 let value = self.read_8_bit_value(instruction);
-                let subtracted = self.cpu.a.wrapping_sub(value);
-                self.update_flags_after_compare(self.cpu.a, value, subtracted);
+                let accumulator = self.mmu.cpu().registers.a;
+                let subtracted = accumulator.wrapping_sub(value);
+                self.update_flags_after_compare(accumulator, value, subtracted);
             }
             InstructionType::CPX => {
                 let value = self.read_8_bit_value(instruction);
-                let subtracted = self.cpu.x.wrapping_sub(value);
-                self.update_flags_after_compare(self.cpu.x, value, subtracted);
+                let x = self.mmu.cpu().registers.x;
+                let subtracted = x.wrapping_sub(value);
+                self.update_flags_after_compare(x, value, subtracted);
             }
             InstructionType::CPY => {
                 let value = self.read_8_bit_value(instruction);
-                let subtracted = self.cpu.y.wrapping_sub(value);
-                self.update_flags_after_compare(self.cpu.y, value, subtracted);
+                let y = self.mmu.cpu().registers.y;
+                let subtracted = y.wrapping_sub(value);
+                self.update_flags_after_compare(y, value, subtracted);
             }
             InstructionType::BIT => {
                 let value = self.read_8_bit_value(instruction);
-                let result = self.cpu.a & value;
-                self.cpu.set_flags(Flags {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                let result = registers.a & value;
+                registers.set_flags(Flags {
                     negative: (value & 0b10000000) != 0,
                     overflow: (value & 0b01000000) != 0,
                     zero: result == 0,
-                    ..self.cpu.flags()
+                    ..registers.flags()
                 })
             }
             InstructionType::BCC => {
-                if !self.cpu.flags().carry {
+                if !self.mmu.cpu().registers.flags().carry {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BCS => {
-                if self.cpu.flags().carry {
+                if self.mmu.cpu().registers.flags().carry {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BNE => {
-                if !self.cpu.flags().zero {
+                if !self.mmu.cpu().registers.flags().zero {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BEQ => {
-                if self.cpu.flags().zero {
+                if self.mmu.cpu().registers.flags().zero {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BPL => {
-                if !self.cpu.flags().negative {
+                if !self.mmu.cpu().registers.flags().negative {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BMI => {
-                if self.cpu.flags().negative {
+                if self.mmu.cpu().registers.flags().negative {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BVC => {
-                if !self.cpu.flags().overflow {
+                if !self.mmu.cpu().registers.flags().overflow {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::BVS => {
-                if self.cpu.flags().overflow {
+                if self.mmu.cpu().registers.flags().overflow {
                     self.jump(instruction.addressing_mode);
                 }
             }
             InstructionType::TAX => {
-                self.cpu.x = self.cpu.a;
-                self.update_zero_and_negative_flags(self.cpu.x);
+                let value = self.mmu.cpu().registers.a;
+                self.mmu.cpu_mut().registers.x = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::TXA => {
-                self.cpu.a = self.cpu.x;
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let value = self.mmu.cpu().registers.x;
+                self.mmu.cpu_mut().registers.a = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::TAY => {
-                self.cpu.y = self.cpu.a;
-                self.update_zero_and_negative_flags(self.cpu.y);
+                let value = self.mmu.cpu().registers.a;
+                self.mmu.cpu_mut().registers.y = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::TYA => {
-                self.cpu.a = self.cpu.y;
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let value = self.mmu.cpu().registers.y;
+                self.mmu.cpu_mut().registers.a = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::TSX => {
-                self.cpu.x = self.cpu.s;
-                self.update_zero_and_negative_flags(self.cpu.x);
+                let value = self.mmu.cpu().registers.s;
+                self.mmu.cpu_mut().registers.x = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::TXS => {
-                self.cpu.s = self.cpu.x;
-                self.update_zero_and_negative_flags(self.cpu.s);
+                let value = self.mmu.cpu().registers.x;
+                self.mmu.cpu_mut().registers.s = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::PHA => {
-                let value = self.cpu.a;
-                self.memory.stack(self.cpu).push(value);
+                let registers = &mut self.mmu.cpu_mut().registers;
+                let value = registers.a;
+                Stack::new(self.mmu.cpu_mut()).push(value);
             }
             InstructionType::PLA => {
-                self.cpu.a = self.memory.stack(self.cpu).pop();
-                self.update_zero_and_negative_flags(self.cpu.a);
+                let value = Stack::new(self.mmu.cpu_mut()).pop();
+                self.mmu.cpu_mut().registers.a = value;
+                self.update_zero_and_negative_flags(value);
             }
             InstructionType::PHP => {
-                let value = self.cpu.p;
-                self.memory.stack(self.cpu).push(value);
+                let value = self.mmu.cpu().registers.p;
+                Stack::new(self.mmu.cpu_mut()).push(value);
             }
             InstructionType::PLP => {
-                self.cpu.p = self.memory.stack(self.cpu).pop();
+                let value = Stack::new(self.mmu.cpu_mut()).pop();
+                self.mmu.cpu_mut().registers.p = value;
             }
             InstructionType::JMP => {
-                self.cpu.pc = self
-                    .memory
-                    .address_by_mode(self.cpu, instruction.addressing_mode)
+                let jump_address = self
+                    .mmu
+                    .address_by_mode(instruction.addressing_mode)
                     .expect("Invalid addressing mode");
+
+                self.mmu.cpu_mut().registers.pc = jump_address;
             }
             InstructionType::JSR => match instruction.addressing_mode {
                 AddressingMode::Absolute(address) => {
-                    let return_address = self.cpu.pc.wrapping_sub(1).to_le_bytes();
-                    let mut stack = self.memory.stack(self.cpu);
+                    let return_address = self.mmu.cpu().registers.pc.wrapping_sub(1).to_le_bytes();
+                    let mut stack = Stack::new(self.mmu.cpu_mut());
                     stack.push(return_address[1]);
                     stack.push(return_address[0]);
-                    self.cpu.pc = address;
+                    self.mmu.cpu_mut().registers.pc = address;
                 }
                 _ => panic!("Invalid addressing mode for JSR. JSR only support absolute addressing"),
             },
             InstructionType::RTS => {
-                let mut stack = self.memory.stack(self.cpu);
+                let mut stack = Stack::new(self.mmu.cpu_mut());
                 let lo_word = stack.pop();
                 let hi_word = stack.pop();
-                self.cpu.pc = u16::from_le_bytes([lo_word, hi_word]).wrapping_add(1);
+                self.mmu.cpu_mut().registers.pc = u16::from_le_bytes([lo_word, hi_word]).wrapping_add(1);
             }
             InstructionType::RTI => {
-                let mut stack = self.memory.stack(self.cpu);
+                let mut stack = Stack::new(self.mmu.cpu_mut());
                 let flags = Flags::from(stack.pop());
                 let lo_word = stack.pop();
                 let hi_word = stack.pop();
-                self.cpu.set_flags(flags);
-                self.cpu.pc = u16::from_le_bytes([lo_word, hi_word]);
+
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(flags);
+                registers.pc = u16::from_le_bytes([lo_word, hi_word]);
             }
-            InstructionType::CLC => self.cpu.set_flags(Flags {
-                carry: false,
-                ..self.cpu.flags()
-            }),
-            InstructionType::SEC => self.cpu.set_flags(Flags {
-                carry: true,
-                ..self.cpu.flags()
-            }),
-            InstructionType::CLD => self.cpu.set_flags(Flags {
-                decimal: false,
-                ..self.cpu.flags()
-            }),
-            InstructionType::SED => self.cpu.set_flags(Flags {
-                decimal: true,
-                ..self.cpu.flags()
-            }),
-            InstructionType::CLI => self.cpu.set_flags(Flags {
-                interrupt_disable: false,
-                ..self.cpu.flags()
-            }),
-            InstructionType::SEI => self.cpu.set_flags(Flags {
-                interrupt_disable: true,
-                ..self.cpu.flags()
-            }),
-            InstructionType::CLV => self.cpu.set_flags(Flags {
-                overflow: false,
-                ..self.cpu.flags()
-            }),
+            InstructionType::CLC => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    carry: false,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::SEC => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    carry: true,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::CLD => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    decimal: false,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::SED => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    decimal: true,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::CLI => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    interrupt_disable: false,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::SEI => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    interrupt_disable: true,
+                    ..registers.flags()
+                })
+            }
+            InstructionType::CLV => {
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.set_flags(Flags {
+                    overflow: false,
+                    ..registers.flags()
+                })
+            }
             InstructionType::BRK => {
-                let pc_address = self.cpu.pc.to_le_bytes();
-                let status = self.cpu.p;
-                let mut stack = self.memory.stack(self.cpu);
+                let registers = &self.mmu.cpu().registers;
+                let pc_address = registers.pc.to_le_bytes();
+                let flags = registers.flags();
+
+                let mut stack = Stack::new(self.mmu.cpu_mut());
                 stack.push(pc_address[1]);
                 stack.push(pc_address[0]);
-                stack.push(status);
-                self.cpu.set_flags(Flags {
+                stack.push(flags.into());
+
+                self.mmu.cpu_mut().registers.set_flags(Flags {
                     break_command: true,
-                    ..self.cpu.flags()
+                    ..flags
                 });
             }
             InstructionType::NOP => (),
         }
 
         if instruction.instruction_type.increments_pc() {
-            self.cpu.pc += instruction.addressing_mode.byte_length() as u16;
+            self.mmu.cpu_mut().registers.pc += instruction.addressing_mode.byte_length() as u16;
         }
     }
 
     fn read_8_bit_value(&self, instruction: Instruction) -> u8 {
-        self.memory
-            .read_8_bit_value_by_mode(self.cpu, instruction.addressing_mode)
-            .expect("Failed to read value")
+        self.mmu
+            .read_by_mode(instruction.addressing_mode)
+            .expect("Failed to read by mode")
     }
 
     fn write_8_bit_value(&mut self, instruction: Instruction, value: u8) {
-        self.memory
-            .write_8_bit_value_by_mode(self.cpu, instruction.addressing_mode, value);
+        self.mmu.write_8_bit_value_by_mode(instruction.addressing_mode, value);
     }
 
     fn update_flags_after_arithmetic(&mut self, old_a: u8, value: u8, carry: bool) {
-        let a_sign = Sign::from(self.cpu.a);
-        self.cpu.set_flags(Flags {
+        let registers = &mut self.mmu.cpu_mut().registers;
+        let a_sign = Sign::from(registers.a);
+        registers.set_flags(Flags {
             negative: a_sign == Sign::Negative,
             overflow: a_sign != Sign::from(old_a) && a_sign != Sign::from(value),
-            zero: self.cpu.a == 0,
+            zero: registers.a == 0,
             carry,
-            ..self.cpu.flags()
+            ..registers.flags()
         });
     }
 
     fn update_flags_after_shift(&mut self, value: u8, carry: bool) {
-        self.cpu.set_flags(Flags {
+        let registers = &mut self.mmu.cpu_mut().registers;
+        registers.set_flags(Flags {
             negative: Sign::from(value) == Sign::Negative,
             zero: value == 0,
             carry,
-            ..self.cpu.flags()
+            ..registers.flags()
         })
     }
 
     fn update_zero_and_negative_flags(&mut self, value: u8) {
-        self.cpu.set_flags(Flags {
+        let registers = &mut self.mmu.cpu_mut().registers;
+        registers.set_flags(Flags {
             zero: value == 0,
             negative: Sign::from(value) == Sign::Negative,
-            ..self.cpu.flags()
+            ..registers.flags()
         })
     }
 
     fn update_flags_after_compare(&mut self, register_value: u8, memory_value: u8, result: u8) {
-        self.cpu.set_flags(Flags {
+        let registers = &mut self.mmu.cpu_mut().registers;
+        registers.set_flags(Flags {
             negative: (result & 0b10000000) != 0,
             zero: register_value == memory_value,
             carry: register_value >= memory_value,
-            ..self.cpu.flags()
+            ..registers.flags()
         })
     }
 
     fn jump(&mut self, addressing_mode: AddressingMode) {
         match addressing_mode {
             AddressingMode::Relative(jump_offset) => {
-                self.cpu.pc = match jump_offset.is_positive() {
-                    true => self.cpu.pc.wrapping_add(jump_offset as u16),
-                    false => self.cpu.pc.wrapping_sub(jump_offset.abs() as u16),
+                let registers = &mut self.mmu.cpu_mut().registers;
+                registers.pc = match jump_offset.is_positive() {
+                    true => registers.pc.wrapping_add(jump_offset as u16),
+                    false => registers.pc.wrapping_sub(jump_offset.abs() as u16),
                 }
             }
             _ => panic!("Invalid addressing mode for jump instruction. They can only use relative addressing"),
@@ -835,20 +895,22 @@ pub mod tests {
     use super::{Instruction, InstructionExecutor, InstructionType};
     use crate::{
         error::InvalidOpCode,
-        hardware::{AddressingMode, Flags, Memory, CPU},
+        hardware::{
+            cpu::{AddressingMode, Flags, CPU, MMU},
+            memory::{Memory, Stack},
+        },
     };
 
     #[test]
     pub fn test_adc() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x01;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x02);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x02);
         assert!(!flags.carry);
         assert!(!flags.overflow);
         assert!(!flags.negative);
@@ -858,14 +920,13 @@ pub mod tests {
     #[test]
     pub fn test_adc_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x01;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x00);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x00);
         assert!(flags.carry);
         assert!(!flags.overflow);
         assert!(!flags.negative);
@@ -875,13 +936,13 @@ pub mod tests {
     #[test]
     pub fn test_adc_overflow() {
         let mut cpu = CPU::new();
-        cpu.a = 0x7F;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x7F;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x80);
+
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x80);
         assert!(!flags.carry);
         assert!(flags.overflow);
         assert!(flags.negative);
@@ -891,14 +952,13 @@ pub mod tests {
     #[test]
     pub fn test_adc_carry_overflow() {
         let mut cpu = CPU::new();
-        cpu.a = 0x80;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x80;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x7F);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x7F);
         assert!(flags.carry);
         assert!(flags.overflow);
         assert!(!flags.negative);
@@ -908,14 +968,13 @@ pub mod tests {
     #[test]
     pub fn test_sbc() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x01;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x00);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x00);
         assert!(!flags.carry);
         assert!(!flags.overflow);
         assert!(!flags.negative);
@@ -925,14 +984,13 @@ pub mod tests {
     #[test]
     pub fn test_sbc_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x01;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x02);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x02);
         assert!(flags.carry);
         assert!(!flags.overflow);
         assert!(!flags.negative);
@@ -942,14 +1000,13 @@ pub mod tests {
     #[test]
     pub fn test_sbc_overflow() {
         let mut cpu = CPU::new();
-        cpu.a = 0xFF;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0xFF;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x00);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x00);
         assert!(!flags.carry);
         assert!(flags.overflow);
         assert!(!flags.negative);
@@ -959,14 +1016,13 @@ pub mod tests {
     #[test]
     pub fn test_sbc_carry_overflow() {
         let mut cpu = CPU::new();
-        cpu.a = 0x00;
-        let mut memory = Memory::new();
+        cpu.registers.a = 0x00;
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0xFF);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0xFF);
         assert!(flags.carry);
         assert!(flags.overflow);
         assert!(flags.negative);
@@ -976,13 +1032,12 @@ pub mod tests {
     #[test]
     pub fn test_lda() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0x01);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -990,12 +1045,12 @@ pub mod tests {
     #[test]
     pub fn test_ldx() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, 0x01);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1003,12 +1058,12 @@ pub mod tests {
     #[test]
     pub fn test_ldy() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.y, 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.y, 0x01);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1016,42 +1071,45 @@ pub mod tests {
     #[test]
     pub fn test_sta() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu)
             .execute(Instruction::new(InstructionType::STA, AddressingMode::Absolute(0x0200)));
-        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+        assert_eq!(mmu.read(0x0200), Some(0x01));
     }
 
     #[test]
     pub fn test_stx() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu)
             .execute(Instruction::new(InstructionType::STX, AddressingMode::Absolute(0x0200)));
-        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+        assert_eq!(mmu.read(0x0200), Some(0x01));
     }
 
     #[test]
     pub fn test_sty() {
         let mut cpu = CPU::new();
-        cpu.y = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.y = 0x01;
+
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu)
             .execute(Instruction::new(InstructionType::STY, AddressingMode::Absolute(0x0200)));
-        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+        assert_eq!(mmu.read(0x0200), Some(0x01));
     }
 
     #[test]
     pub fn test_inc() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::INC, AddressingMode::Absolute(0x0200)));
 
-        let flags = cpu.flags();
-        assert_eq!(memory.read_8_bit_value(0x0200), 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(MMU::new(&mut cpu, None).read(0x0200), Some(0x01));
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1059,12 +1117,12 @@ pub mod tests {
     #[test]
     pub fn test_inx() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::INX, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, 0x01);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1072,12 +1130,12 @@ pub mod tests {
     #[test]
     pub fn test_iny() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::INY, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.y, 0x01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.y, 0x01);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1085,12 +1143,12 @@ pub mod tests {
     #[test]
     pub fn test_dec() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::DEC, AddressingMode::Absolute(0x0200)));
 
-        let flags = cpu.flags();
-        assert_eq!(memory.read_8_bit_value(0x0200), 0xFF);
+        let flags = cpu.registers.flags();
+        assert_eq!(MMU::new(&mut cpu, None).read(0x0200), Some(0xFF));
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1098,12 +1156,12 @@ pub mod tests {
     #[test]
     pub fn test_dex() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::DEX, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, 0xFF);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, 0xFF);
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1111,12 +1169,12 @@ pub mod tests {
     #[test]
     pub fn test_dey() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::DEY, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.y, 0xFF);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.y, 0xFF);
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1124,13 +1182,13 @@ pub mod tests {
     #[test]
     pub fn test_asl() {
         let mut cpu = CPU::new();
-        cpu.a = 0b01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1139,13 +1197,13 @@ pub mod tests {
     #[test]
     pub fn test_asl_saturating() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b11111110);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b11111110);
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1154,13 +1212,13 @@ pub mod tests {
     #[test]
     pub fn test_asl_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0b10000000;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b10000000;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b0);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b0);
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(flags.carry);
@@ -1169,13 +1227,13 @@ pub mod tests {
     #[test]
     pub fn test_lsr() {
         let mut cpu = CPU::new();
-        cpu.a = 0b10;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b10;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b01);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1184,13 +1242,13 @@ pub mod tests {
     #[test]
     pub fn test_lsr_saturating() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b01111111);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b01111111);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1199,13 +1257,13 @@ pub mod tests {
     #[test]
     pub fn test_lsr_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0b00000001;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b00000001;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b00);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b00);
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(flags.carry);
@@ -1214,13 +1272,13 @@ pub mod tests {
     #[test]
     pub fn test_rol() {
         let mut cpu = CPU::new();
-        cpu.a = 0b01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1229,13 +1287,13 @@ pub mod tests {
     #[test]
     pub fn test_rol_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b11111110);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b11111110);
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1244,17 +1302,17 @@ pub mod tests {
     #[test]
     pub fn test_rol_carry_over() {
         let mut cpu = CPU::new();
-        cpu.a = 0b00;
-        cpu.set_flags(Flags {
+        cpu.registers.a = 0b00;
+        cpu.registers.set_flags(Flags {
             carry: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b01);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1263,13 +1321,13 @@ pub mod tests {
     #[test]
     pub fn test_ror() {
         let mut cpu = CPU::new();
-        cpu.a = 0b10;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b10;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b01);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b01);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1278,13 +1336,13 @@ pub mod tests {
     #[test]
     pub fn test_ror_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b01111111);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b01111111);
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1293,17 +1351,17 @@ pub mod tests {
     #[test]
     pub fn test_ror_carry_over() {
         let mut cpu = CPU::new();
-        cpu.a = 0b00;
-        cpu.set_flags(Flags {
+        cpu.registers.a = 0b00;
+        cpu.registers.set_flags(Flags {
             carry: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10000000);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10000000);
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1312,15 +1370,15 @@ pub mod tests {
     #[test]
     pub fn test_and() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(Instruction::new(
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None)).execute(Instruction::new(
             InstructionType::AND,
             AddressingMode::Immediate(0b10101010),
         ));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10101010);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10101010);
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1328,15 +1386,15 @@ pub mod tests {
     #[test]
     pub fn test_ora() {
         let mut cpu = CPU::new();
-        cpu.a = 0b00000000;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(Instruction::new(
+        cpu.registers.a = 0b00000000;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None)).execute(Instruction::new(
             InstructionType::ORA,
             AddressingMode::Immediate(0b10101010),
         ));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10101010);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10101010);
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1344,15 +1402,15 @@ pub mod tests {
     #[test]
     pub fn test_eor() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory).execute(Instruction::new(
+        cpu.registers.a = 0b11111111;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None)).execute(Instruction::new(
             InstructionType::EOR,
             AddressingMode::Immediate(0b01010101),
         ));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.a, 0b10101010);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.a, 0b10101010);
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1360,12 +1418,12 @@ pub mod tests {
     #[test]
     pub fn test_cmp_equals() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(flags.carry);
@@ -1374,12 +1432,12 @@ pub mod tests {
     #[test]
     pub fn test_cmp_greater() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x00)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1388,12 +1446,12 @@ pub mod tests {
     #[test]
     pub fn test_cmp_less() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x02)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1402,12 +1460,12 @@ pub mod tests {
     #[test]
     pub fn test_cpx_equals() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(flags.carry);
@@ -1416,12 +1474,12 @@ pub mod tests {
     #[test]
     pub fn test_cpx_greater() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x00)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1430,12 +1488,12 @@ pub mod tests {
     #[test]
     pub fn test_cpx_less() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x02)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1444,12 +1502,12 @@ pub mod tests {
     #[test]
     pub fn test_cpy_equals() {
         let mut cpu = CPU::new();
-        cpu.y = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.y = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x01)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(flags.carry);
@@ -1458,12 +1516,12 @@ pub mod tests {
     #[test]
     pub fn test_cpy_greater() {
         let mut cpu = CPU::new();
-        cpu.y = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.y = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x00)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(!flags.zero);
         assert!(flags.carry);
@@ -1472,12 +1530,12 @@ pub mod tests {
     #[test]
     pub fn test_cpy_less() {
         let mut cpu = CPU::new();
-        cpu.y = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.y = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x02)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(!flags.carry);
@@ -1486,13 +1544,14 @@ pub mod tests {
     #[test]
     pub fn test_bit_zero() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        memory.write_8_bit_value(0x0000, 0b00000000);
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        let mut mmu = MMU::new(&mut cpu, None);
+        mmu.write(0x0000, 0b00000000);
+        InstructionExecutor::new(&mut mmu)
             .execute(Instruction::new(InstructionType::BIT, AddressingMode::ZeroPage(0x00)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(!flags.negative);
         assert!(flags.zero);
         assert!(!flags.overflow);
@@ -1501,13 +1560,14 @@ pub mod tests {
     #[test]
     pub fn test_bit_negative_and_carry() {
         let mut cpu = CPU::new();
-        cpu.a = 0b11111111;
-        let mut memory = Memory::new();
-        memory.write_8_bit_value(0x0000, 0b11000000);
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0b11111111;
+
+        let mut mmu = MMU::new(&mut cpu, None);
+        mmu.write(0x0000, 0b11000000);
+        InstructionExecutor::new(&mut mmu)
             .execute(Instruction::new(InstructionType::BIT, AddressingMode::ZeroPage(0x00)));
 
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(flags.negative);
         assert!(!flags.zero);
         assert!(flags.overflow);
@@ -1516,109 +1576,109 @@ pub mod tests {
     #[test]
     pub fn test_bcc() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BCC, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bcs() {
         let mut cpu = CPU::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             carry: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BCS, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bne() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BNE, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_beq() {
         let mut cpu = CPU::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             zero: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BEQ, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bpl() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BPL, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bmi() {
         let mut cpu = CPU::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             negative: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BMI, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bvc() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BVC, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_bvs() {
         let mut cpu = CPU::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             overflow: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BVS, AddressingMode::Relative(2)));
 
-        assert_eq!(cpu.pc, 0x02);
+        assert_eq!(cpu.registers.pc, 0x04);
     }
 
     #[test]
     pub fn test_tax() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TAX, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, cpu.a);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, cpu.registers.a);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1626,13 +1686,13 @@ pub mod tests {
     #[test]
     pub fn test_txa() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TXA, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, cpu.a);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, cpu.registers.a);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1640,13 +1700,13 @@ pub mod tests {
     #[test]
     pub fn test_tay() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.a = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TAY, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.y, cpu.a);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.y, cpu.registers.a);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1654,13 +1714,13 @@ pub mod tests {
     #[test]
     pub fn test_tya() {
         let mut cpu = CPU::new();
-        cpu.y = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.y = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TYA, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.y, cpu.a);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.y, cpu.registers.a);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1668,13 +1728,13 @@ pub mod tests {
     #[test]
     pub fn test_tsx() {
         let mut cpu = CPU::new();
-        cpu.s = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.s = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TSX, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, cpu.s);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, cpu.registers.s);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1682,13 +1742,13 @@ pub mod tests {
     #[test]
     pub fn test_txs() {
         let mut cpu = CPU::new();
-        cpu.x = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.x = 0x01;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::TXS, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.x, cpu.s);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.x, cpu.registers.s);
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1696,26 +1756,26 @@ pub mod tests {
     #[test]
     pub fn test_pha() {
         let mut cpu = CPU::new();
-        cpu.a = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
-            .execute(Instruction::new(InstructionType::PHA, AddressingMode::Implied));
+        cpu.registers.a = 0x01;
 
-        assert_eq!(cpu.s, 0xFE);
-        assert_eq!(memory.read_8_bit_value(0x01FF), cpu.a);
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PHA, AddressingMode::Implied));
+
+        assert_eq!(mmu.cpu().registers.s, 0xFE);
+        assert_eq!(mmu.read(0x01FF), Some(cpu.registers.a));
     }
 
     #[test]
     pub fn test_pla() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        memory.stack(&mut cpu).push(0x01);
-        InstructionExecutor::new(&mut cpu, &mut memory)
-            .execute(Instruction::new(InstructionType::PLA, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.s, 0xFF);
-        assert_eq!(memory.read_8_bit_value(0x01FF), cpu.a);
+        Stack::new(&mut cpu).push(0x01);
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PLA, AddressingMode::Implied));
+
+        let flags = mmu.cpu().registers.flags();
+        assert_eq!(mmu.cpu().registers.s, 0xFF);
+        assert_eq!(mmu.read(0x01FF), Some(cpu.registers.a));
         assert!(!flags.zero);
         assert!(!flags.negative);
     }
@@ -1723,26 +1783,26 @@ pub mod tests {
     #[test]
     pub fn test_php() {
         let mut cpu = CPU::new();
-        cpu.p = 0x01;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
-            .execute(Instruction::new(InstructionType::PHP, AddressingMode::Implied));
+        cpu.registers.p = 0x01;
 
-        assert_eq!(cpu.s, 0xFE);
-        assert_eq!(memory.read_8_bit_value(0x01FF), cpu.p);
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PHP, AddressingMode::Implied));
+
+        assert_eq!(mmu.cpu().registers.s, 0xFE);
+        assert_eq!(mmu.read(0x01FF), Some(cpu.registers.p));
     }
 
     #[test]
     pub fn test_plp() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        memory.stack(&mut cpu).push(0x01);
-        InstructionExecutor::new(&mut cpu, &mut memory)
-            .execute(Instruction::new(InstructionType::PLP, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.s, 0xFF);
-        assert_eq!(memory.read_8_bit_value(0x01FF), cpu.p);
+        Stack::new(&mut cpu).push(0x01);
+        let mut mmu = MMU::new(&mut cpu, None);
+        InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PLP, AddressingMode::Implied));
+
+        let flags = mmu.cpu().registers.flags();
+        assert_eq!(mmu.cpu().registers.s, 0xFF);
+        assert_eq!(mmu.read(0x01FF), Some(cpu.registers.p));
         assert!(!flags.zero);
         assert!(!flags.negative);
     }
@@ -1750,54 +1810,54 @@ pub mod tests {
     #[test]
     pub fn test_jmp() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::JMP, AddressingMode::Absolute(0x0600)));
 
-        assert_eq!(cpu.pc, 0x0600);
+        assert_eq!(cpu.registers.pc, 0x0600);
     }
 
     #[test]
     pub fn test_jsr() {
         let mut cpu = CPU::new();
-        cpu.pc = 0x0601;
-        let mut memory = Memory::new();
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        cpu.registers.pc = 0x0601;
+
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::JSR, AddressingMode::Absolute(0x1000)));
 
-        let mut stack = memory.stack(&mut cpu);
+        let mut stack = Stack::new(&mut cpu);
         assert_eq!(stack.pop(), 0x00);
         assert_eq!(stack.pop(), 0x06);
-        assert_eq!(cpu.pc, 0x1000);
+        assert_eq!(cpu.registers.pc, 0x1000);
     }
 
     #[test]
     pub fn test_rts() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        let mut stack = memory.stack(&mut cpu);
+
+        let mut stack = Stack::new(&mut cpu);
         stack.push(0x06);
         stack.push(0x00);
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::RTS, AddressingMode::Implied));
 
-        assert_eq!(cpu.pc, 0x0601);
+        assert_eq!(cpu.registers.pc, 0x0601);
     }
 
     #[test]
     pub fn test_rti() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        let mut stack = memory.stack(&mut cpu);
+
+        let mut stack = Stack::new(&mut cpu);
         stack.push(0x06);
         stack.push(0x00);
         stack.push(0b00000011);
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::RTI, AddressingMode::Implied));
 
-        let flags = cpu.flags();
-        assert_eq!(cpu.pc, 0x0600);
+        let flags = cpu.registers.flags();
+        assert_eq!(cpu.registers.pc, 0x0600);
         assert!(flags.carry);
         assert!(flags.zero);
         assert!(!flags.interrupt_disable);
@@ -1809,110 +1869,104 @@ pub mod tests {
     #[test]
     pub fn test_clc() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        cpu.set_flags(Flags {
+
+        cpu.registers.set_flags(Flags {
             carry: true,
             ..Default::default()
         });
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CLC, AddressingMode::Implied));
 
-        assert!(!cpu.flags().carry);
+        assert!(!cpu.registers.flags().carry);
     }
 
     #[test]
     pub fn test_sec() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SEC, AddressingMode::Implied));
 
-        assert!(cpu.flags().carry);
+        assert!(cpu.registers.flags().carry);
     }
 
     #[test]
     pub fn test_cld() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        cpu.set_flags(Flags {
+
+        cpu.registers.set_flags(Flags {
             decimal: true,
             ..Default::default()
         });
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CLD, AddressingMode::Implied));
 
-        assert!(!cpu.flags().decimal);
+        assert!(!cpu.registers.flags().decimal);
     }
 
     #[test]
     pub fn test_sed() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SED, AddressingMode::Implied));
 
-        assert!(cpu.flags().decimal);
+        assert!(cpu.registers.flags().decimal);
     }
 
     #[test]
     pub fn test_cli() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             interrupt_disable: true,
             ..Default::default()
         });
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CLI, AddressingMode::Implied));
 
-        assert!(!cpu.flags().interrupt_disable);
+        assert!(!cpu.registers.flags().interrupt_disable);
     }
 
     #[test]
     pub fn test_sei() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::SEI, AddressingMode::Implied));
 
-        assert!(cpu.flags().interrupt_disable);
+        assert!(cpu.registers.flags().interrupt_disable);
     }
 
     #[test]
     pub fn test_clv() {
         let mut cpu = CPU::new();
-        let mut memory = Memory::new();
-        cpu.set_flags(Flags {
+        cpu.registers.set_flags(Flags {
             overflow: true,
             ..Default::default()
         });
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::CLV, AddressingMode::Implied));
 
-        assert!(!cpu.flags().overflow);
+        assert!(!cpu.registers.flags().overflow);
     }
 
     #[test]
     pub fn test_brk() {
         let mut cpu = CPU::new();
-        cpu.pc = 0x0600;
-        cpu.set_flags(Flags {
+        cpu.registers.pc = 0x0600;
+        cpu.registers.set_flags(Flags {
             carry: true,
             ..Default::default()
         });
-        let mut memory = Memory::new();
 
-        InstructionExecutor::new(&mut cpu, &mut memory)
+        InstructionExecutor::new(&mut MMU::new(&mut cpu, None))
             .execute(Instruction::new(InstructionType::BRK, AddressingMode::Implied));
 
-        let mut stack = memory.stack(&mut cpu);
+        let mut stack = Stack::new(&mut cpu);
         assert_eq!(
             stack.pop(),
             Flags {
@@ -1923,7 +1977,7 @@ pub mod tests {
         );
         assert_eq!(stack.pop(), 0x00);
         assert_eq!(stack.pop(), 0x06);
-        let flags = cpu.flags();
+        let flags = cpu.registers.flags();
         assert!(flags.break_command);
     }
 

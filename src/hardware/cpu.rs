@@ -1,5 +1,92 @@
-#[derive(Debug)]
+use super::memory::{Memory, MemoryMapper};
+
 pub struct CPU {
+    pub registers: Registers,
+    pub internal_memory: [u8; 0x0800],
+}
+
+impl CPU {
+    pub fn new() -> Self {
+        Self {
+            registers: Registers::new(),
+            internal_memory: [0; 0x0800],
+        }
+    }
+}
+
+pub struct MMU<'a, 'b> {
+    cpu: &'a mut CPU,
+    mapper: Option<&'a MemoryMapper<'b>>,
+}
+
+impl<'a, 'b> MMU<'a, 'b> {
+    pub fn new(cpu: &'a mut CPU, mapper: Option<&'a MemoryMapper<'b>>) -> Self {
+        Self { cpu, mapper }
+    }
+
+    pub fn cpu(&self) -> &CPU {
+        self.cpu
+    }
+
+    pub fn cpu_mut(&mut self) -> &mut CPU {
+        self.cpu
+    }
+
+    pub fn read_by_mode(&self, addressing_mode: AddressingMode) -> Option<u8> {
+        match addressing_mode {
+            AddressingMode::Accumulator => Some(self.cpu.registers.a),
+            AddressingMode::Immediate(value) => Some(value),
+            mode => self.address_by_mode(mode).and_then(|address| self.read(address)),
+        }
+    }
+
+    pub fn write_8_bit_value_by_mode(&mut self, addressing_mode: AddressingMode, value: u8) {
+        match addressing_mode {
+            AddressingMode::Accumulator => self.cpu.registers.a = value,
+            mode => self.write(self.address_by_mode(mode).expect("Invalid addressing mode"), value),
+        }
+    }
+
+    pub fn address_by_mode(&self, addressing_mode: AddressingMode) -> Option<u16> {
+        match addressing_mode {
+            AddressingMode::ZeroPage(address) => Some(address as u16),
+            AddressingMode::ZeroPageX(address) => Some(address.wrapping_add(self.cpu.registers.x) as u16),
+            AddressingMode::ZeroPageY(address) => Some(address.wrapping_add(self.cpu.registers.y) as u16),
+            AddressingMode::Absolute(address) => Some(address),
+            AddressingMode::AbsoluteX(address) => Some(address.wrapping_add(self.cpu.registers.x as u16)),
+            AddressingMode::AbsoluteY(address) => Some(address.wrapping_add(self.cpu.registers.y as u16)),
+            AddressingMode::IndexedIndirect(address) => {
+                self.read_16_bit_value(address.wrapping_add(self.cpu.registers.x) as u16)
+            }
+            AddressingMode::IndirectIndexed(address) => self
+                .read_16_bit_value(address as u16)
+                .map(|value| value.wrapping_add(self.cpu.registers.y as u16)),
+            _ => None,
+        }
+    }
+}
+
+impl<'a, 'b> Memory for MMU<'a, 'b> {
+    fn read(&self, address: u16) -> Option<u8> {
+        match address {
+            0x0000..=0x1FFF => Some(self.cpu.internal_memory[(address % 0x0800) as usize]),
+            0x2000..=0x3FFF => unimplemented!("Reads ppu registers"),
+            0x4000..=0x4017 => unimplemented!("APU and IO registers"),
+            0x4018..=0x401F => unimplemented!("APU and IO functionality"),
+            0x4020..=0xFFFF => self.mapper.and_then(|mapper| mapper.read(address)),
+        }
+    }
+
+    fn write(&mut self, address: u16, value: u8) {
+        match address {
+            0x0000..=0x1FFF => self.cpu.internal_memory[(address % 0x0800) as usize] = value,
+            _ => panic!("Access violation. Trying to write to read only address {:#X}", address),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Registers {
     pub a: u8,
     pub x: u8,
     pub y: u8,
@@ -8,7 +95,7 @@ pub struct CPU {
     pub pc: u16,
 }
 
-impl CPU {
+impl Registers {
     pub fn new() -> Self {
         Self {
             a: 0x00,
