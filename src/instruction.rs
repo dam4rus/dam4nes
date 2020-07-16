@@ -5,6 +5,8 @@ use crate::{
         memory::Stack,
     },
 };
+use std::fmt::{Display, Formatter};
+use log::debug;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InstructionType {
@@ -70,14 +72,6 @@ impl InstructionType {
     pub fn increments_pc(&self) -> bool {
         match self {
             InstructionType::JMP | InstructionType::JSR | InstructionType::RTS | InstructionType::RTI => false,
-            // | InstructionType::BCC
-            // | InstructionType::BCS
-            // | InstructionType::BNE
-            // | InstructionType::BEQ
-            // | InstructionType::BPL
-            // | InstructionType::BMI
-            // | InstructionType::BVC
-            // | InstructionType::BVS => true,
             _ => true,
         }
     }
@@ -85,8 +79,8 @@ impl InstructionType {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Instruction {
-    instruction_type: InstructionType,
-    addressing_mode: AddressingMode,
+    pub instruction_type: InstructionType,
+    pub addressing_mode: AddressingMode,
 }
 
 impl Instruction {
@@ -472,6 +466,12 @@ impl Instruction {
     }
 }
 
+impl Display for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Instruction: {{ type: {:?}, addressing_mode: {} }}", self.instruction_type, self.addressing_mode)
+    }
+}
+
 pub struct InstructionExecutor<'a, 'mmu, 'mapped> {
     mmu: &'a mut MMU<'mmu, 'mapped>,
 }
@@ -482,7 +482,7 @@ impl<'a, 'mmu, 'mapped> InstructionExecutor<'a, 'mmu, 'mapped> {
     }
 
     pub fn execute(&mut self, instruction: Instruction) {
-        println!("Executing {:?}", instruction);
+        debug!("Executing {}", instruction);
         match instruction.instruction_type {
             InstructionType::ADC => {
                 let value = self.read_8_bit_value(instruction);
@@ -818,10 +818,6 @@ impl<'a, 'mmu, 'mapped> InstructionExecutor<'a, 'mmu, 'mapped> {
                 });
             }
             InstructionType::NOP => (),
-        }
-
-        if instruction.instruction_type.increments_pc() {
-            self.mmu.cpu_mut().registers.pc += instruction.addressing_mode.byte_length() as u16;
         }
     }
 

@@ -37,23 +37,23 @@ impl<'a> ROM<'a> {
         }
     }
 
-    pub fn mirroring(&self) -> Mirroring {
-        match (self.flags_6 & 0x01) != 0 {
-            false => Mirroring::Horizontal,
-            true => Mirroring::Vertical,
-        }
-    }
+    // pub fn mirroring(&self) -> Mirroring {
+    //     match (self.flags_6 & 0x01) != 0 {
+    //         false => Mirroring::Horizontal,
+    //         true => Mirroring::Vertical,
+    //     }
+    // }
 
     pub fn prg_rom(&self) -> &[u8] {
         self.prg_rom
     }
 
-    pub fn chr_rom(&self) -> &[u8] {
-        self.chr_rom
-    }
+    // pub fn chr_rom(&self) -> &[u8] {
+    //     self.chr_rom
+    // }
 }
 
-pub enum Mirroring {
-    Horizontal,
-    Vertical,
-}
+// pub enum Mirroring {
+//     Horizontal,
+//     Vertical,
+// }

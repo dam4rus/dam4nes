@@ -2,6 +2,7 @@ use super::{
     memory::{Memory, MemoryMapper},
     ppu::PPU,
 };
+use std::fmt::{Formatter, Display};
 
 const INTERNAL_MEMORY_SIZE: usize = 2048;
 
@@ -12,6 +13,7 @@ pub struct CPU {
 }
 
 impl CPU {
+    #[cfg(test)]
     pub fn new() -> Self {
         Self {
             registers: Default::default(),
@@ -240,6 +242,26 @@ impl AddressingMode {
             AddressingMode::Indirect(_) => 3,
             AddressingMode::IndexedIndirect(_) => 2,
             AddressingMode::IndirectIndexed(_) => 2,
+        }
+    }
+}
+
+impl Display for AddressingMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AddressingMode::Implied => write!(f, "Implied"),
+            AddressingMode::Accumulator => write!(f, "Accumulator"),
+            AddressingMode::Immediate(value) => write!(f, "Immediate({:#X})", *value),
+            AddressingMode::ZeroPage(address) => write!(f, "ZeroPage({:#X})", *address),
+            AddressingMode::ZeroPageX(address) => write!(f, "ZeroPageX({:#X})", *address),
+            AddressingMode::ZeroPageY(address) => write!(f, "ZeroPageY({:#X})", *address),
+            AddressingMode::Relative(offset) => write!(f, "Relative({})", *offset),
+            AddressingMode::Absolute(address) => write!(f, "Absolute({:#X})", *address),
+            AddressingMode::AbsoluteX(address) => write!(f, "AbsoluteX({:#X})", *address),
+            AddressingMode::AbsoluteY(address) => write!(f, "AbsoluteY({:#X})", *address),
+            AddressingMode::Indirect(address) => write!(f, "Indirect({:#X})", *address),
+            AddressingMode::IndexedIndirect(address) => write!(f, "IndexedIndirect({:#X})", *address),
+            AddressingMode::IndirectIndexed(address) => write!(f, "IndirectIndexed({:#X})", *address),
         }
     }
 }

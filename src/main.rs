@@ -10,8 +10,10 @@ use hardware::{
 use instruction::{Instruction, InstructionExecutor};
 use rom::{PRG_PAGE_SIZE, ROM};
 use std::{env, fs::File, io::Read};
+use simplelog::{SimpleLogger, LevelFilter, Config};
 
 fn main() {
+    SimpleLogger::init(LevelFilter::Debug, Config::default()).unwrap();
     let args: Vec<String> = env::args().collect();
 
     let mut rom_file = File::open(&args[1]).unwrap();
@@ -30,7 +32,10 @@ fn main() {
     loop {
         match Instruction::from_machine_code(mapper.slice_from(cpu.registers.pc).unwrap()) {
             Ok(Some(instruction)) => {
-                InstructionExecutor::new(&mut MMU::new(&mut cpu, &mut ppu, Some(&mapper))).execute(instruction)
+                InstructionExecutor::new(&mut MMU::new(&mut cpu, &mut ppu, Some(&mapper))).execute(instruction);
+                if instruction.instruction_type.increments_pc() {
+                    cpu.registers.pc += instruction.addressing_mode.byte_length() as u16;
+                }
             }
             Ok(None) => break,
             Err(err) => {
@@ -38,6 +43,10 @@ fn main() {
                 break;
             }
         }
+
+        ppu.clock.step();
+        // println!("ppu clock: {:?}", ppu.clock);
+        ppu.update();
     }
 
     println!("End");
