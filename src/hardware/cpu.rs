@@ -2,7 +2,7 @@ use super::{
     memory::{Memory, MemoryMapper},
     ppu::PPU,
 };
-use std::fmt::{Formatter, Display};
+use std::fmt::{Display, Formatter};
 
 const INTERNAL_MEMORY_SIZE: usize = 2048;
 

@@ -5,8 +5,8 @@ use crate::{
         memory::Stack,
     },
 };
-use std::fmt::{Display, Formatter};
 use log::debug;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InstructionType {
@@ -468,7 +468,11 @@ impl Instruction {
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Instruction: {{ type: {:?}, addressing_mode: {} }}", self.instruction_type, self.addressing_mode)
+        write!(
+            f,
+            "Instruction: {{ type: {:?}, addressing_mode: {} }}",
+            self.instruction_type, self.addressing_mode
+        )
     }
 }
 
@@ -894,12 +898,12 @@ pub mod tests {
         hardware::{
             cpu::{AddressingMode, Flags, CPU, MMU},
             memory::{Memory, Stack},
+            ppu::PPU,
         },
     };
 
     fn execute_with_cpu(cpu: &mut CPU, instruction: Instruction) {
-        InstructionExecutor::new(&mut MMU::new(cpu, &mut Default::default(), None))
-            .execute(instruction);
+        InstructionExecutor::new(&mut MMU::new(cpu, &mut PPU::new(), None)).execute(instruction);
     }
 
     #[test]
@@ -907,7 +911,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x02);
@@ -922,7 +929,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x00);
@@ -937,7 +947,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x7F;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x80);
@@ -952,7 +965,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x80;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ADC, AddressingMode::Immediate(0xFF)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x7F);
@@ -967,7 +983,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x00);
@@ -982,7 +1001,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x02);
@@ -997,7 +1019,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0xFF;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0xFF)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x00);
@@ -1012,7 +1037,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x00;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SBC, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0xFF);
@@ -1026,7 +1054,10 @@ pub mod tests {
     pub fn test_lda() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LDA, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0x01);
@@ -1038,7 +1069,10 @@ pub mod tests {
     pub fn test_ldx() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LDX, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, 0x01);
@@ -1050,7 +1084,10 @@ pub mod tests {
     pub fn test_ldy() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LDY, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.y, 0x01);
@@ -1062,7 +1099,7 @@ pub mod tests {
     pub fn test_sta() {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         InstructionExecutor::new(&mut mmu)
@@ -1074,7 +1111,7 @@ pub mod tests {
     pub fn test_stx() {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         InstructionExecutor::new(&mut mmu)
@@ -1086,7 +1123,7 @@ pub mod tests {
     pub fn test_sty() {
         let mut cpu = CPU::new();
         cpu.registers.y = 0x01;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         InstructionExecutor::new(&mut mmu)
@@ -1098,10 +1135,13 @@ pub mod tests {
     pub fn test_inc() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::INC, AddressingMode::Absolute(0x0200)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::INC, AddressingMode::Absolute(0x0200)),
+        );
 
         let flags = cpu.registers.flags();
-        assert_eq!(MMU::new(&mut cpu, &mut Default::default(), None).read(0x0200), Some(0x01));
+        assert_eq!(MMU::new(&mut cpu, &mut PPU::new(), None).read(0x0200), Some(0x01));
         assert!(!flags.negative);
         assert!(!flags.zero);
     }
@@ -1110,7 +1150,10 @@ pub mod tests {
     pub fn test_inx() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::INX, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::INX, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, 0x01);
@@ -1122,7 +1165,10 @@ pub mod tests {
     pub fn test_iny() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::INY, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::INY, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.y, 0x01);
@@ -1134,10 +1180,13 @@ pub mod tests {
     pub fn test_dec() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::DEC, AddressingMode::Absolute(0x0200)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::DEC, AddressingMode::Absolute(0x0200)),
+        );
 
         let flags = cpu.registers.flags();
-        assert_eq!(MMU::new(&mut cpu, &mut Default::default(), None).read(0x0200), Some(0xFF));
+        assert_eq!(MMU::new(&mut cpu, &mut PPU::new(), None).read(0x0200), Some(0xFF));
         assert!(flags.negative);
         assert!(!flags.zero);
     }
@@ -1146,7 +1195,10 @@ pub mod tests {
     pub fn test_dex() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::DEX, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::DEX, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, 0xFF);
@@ -1158,7 +1210,10 @@ pub mod tests {
     pub fn test_dey() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::DEY, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::DEY, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.y, 0xFF);
@@ -1171,7 +1226,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ASL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10);
@@ -1185,7 +1243,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ASL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b11111110);
@@ -1199,7 +1260,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b10000000;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ASL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ASL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b0);
@@ -1213,7 +1277,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b10;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LSR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b01);
@@ -1227,7 +1294,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LSR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b01111111);
@@ -1241,7 +1311,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b00000001;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::LSR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::LSR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b00);
@@ -1255,7 +1328,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10);
@@ -1269,7 +1345,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b11111110);
@@ -1287,7 +1366,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROL, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROL, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b01);
@@ -1301,7 +1383,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b10;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b01);
@@ -1315,7 +1400,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b01111111);
@@ -1333,7 +1421,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::ROR, AddressingMode::Accumulator));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ROR, AddressingMode::Accumulator),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10000000);
@@ -1347,10 +1438,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(
-            InstructionType::AND,
-            AddressingMode::Immediate(0b10101010),
-        ));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::AND, AddressingMode::Immediate(0b10101010)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10101010);
@@ -1363,10 +1454,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b00000000;
 
-        execute_with_cpu(&mut cpu, Instruction::new(
-            InstructionType::ORA,
-            AddressingMode::Immediate(0b10101010),
-        ));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::ORA, AddressingMode::Immediate(0b10101010)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10101010);
@@ -1379,10 +1470,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
 
-        execute_with_cpu(&mut cpu, Instruction::new(
-            InstructionType::EOR,
-            AddressingMode::Immediate(0b01010101),
-        ));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::EOR, AddressingMode::Immediate(0b01010101)),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.a, 0b10101010);
@@ -1395,7 +1486,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1408,7 +1502,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x00)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x00)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1421,7 +1518,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x02)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CMP, AddressingMode::Immediate(0x02)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(flags.negative);
@@ -1434,7 +1534,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1447,7 +1550,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x00)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x00)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1460,7 +1566,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x02)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPX, AddressingMode::Immediate(0x02)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(flags.negative);
@@ -1473,7 +1582,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.y = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x01)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x01)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1486,7 +1598,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.y = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x00)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x00)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(!flags.negative);
@@ -1499,7 +1614,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.y = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x02)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CPY, AddressingMode::Immediate(0x02)),
+        );
 
         let flags = cpu.registers.flags();
         assert!(flags.negative);
@@ -1511,7 +1629,7 @@ pub mod tests {
     pub fn test_bit_zero() {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         mmu.write(0x0000, 0b00000000);
@@ -1528,7 +1646,7 @@ pub mod tests {
     pub fn test_bit_negative_and_carry() {
         let mut cpu = CPU::new();
         cpu.registers.a = 0b11111111;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         mmu.write(0x0000, 0b11000000);
@@ -1545,7 +1663,10 @@ pub mod tests {
     pub fn test_bcc() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BCC, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BCC, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1558,7 +1679,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BCS, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BCS, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1567,7 +1691,10 @@ pub mod tests {
     pub fn test_bne() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BNE, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BNE, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1580,7 +1707,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BEQ, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BEQ, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1589,7 +1719,10 @@ pub mod tests {
     pub fn test_bpl() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BPL, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BPL, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1602,7 +1735,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BMI, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BMI, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1611,7 +1747,10 @@ pub mod tests {
     pub fn test_bvc() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BVC, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BVC, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1624,7 +1763,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BVS, AddressingMode::Relative(2)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BVS, AddressingMode::Relative(2)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x04);
     }
@@ -1634,7 +1776,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TAX, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TAX, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, cpu.registers.a);
@@ -1647,7 +1792,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TXA, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TXA, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, cpu.registers.a);
@@ -1660,7 +1808,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TAY, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TAY, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.y, cpu.registers.a);
@@ -1673,7 +1824,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.y = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TYA, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TYA, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.y, cpu.registers.a);
@@ -1686,7 +1840,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.s = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TSX, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TSX, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, cpu.registers.s);
@@ -1699,7 +1856,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.x = 0x01;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::TXS, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::TXS, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.x, cpu.registers.s);
@@ -1712,7 +1872,7 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
         cpu.registers.s = 0xFF;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PHA, AddressingMode::Implied));
@@ -1725,7 +1885,7 @@ pub mod tests {
     pub fn test_pla() {
         let mut cpu = CPU::new();
         cpu.registers.s = 0xFF;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         Stack::new(&mut cpu).push(0x01);
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
@@ -1743,7 +1903,7 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.s = 0xFF;
         cpu.registers.p = 0x01;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
         InstructionExecutor::new(&mut mmu).execute(Instruction::new(InstructionType::PHP, AddressingMode::Implied));
@@ -1756,7 +1916,7 @@ pub mod tests {
     pub fn test_plp() {
         let mut cpu = CPU::new();
         cpu.registers.s = 0xFF;
-        let mut ppu = Default::default();
+        let mut ppu = PPU::new();
 
         Stack::new(&mut cpu).push(0x01);
         let mut mmu = MMU::new(&mut cpu, &mut ppu, None);
@@ -1773,7 +1933,10 @@ pub mod tests {
     pub fn test_jmp() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::JMP, AddressingMode::Absolute(0x0600)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::JMP, AddressingMode::Absolute(0x0600)),
+        );
 
         assert_eq!(cpu.registers.pc, 0x0600);
     }
@@ -1783,7 +1946,10 @@ pub mod tests {
         let mut cpu = CPU::new();
         cpu.registers.pc = 0x0601;
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::JSR, AddressingMode::Absolute(0x1000)));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::JSR, AddressingMode::Absolute(0x1000)),
+        );
 
         let mut stack = Stack::new(&mut cpu);
         assert_eq!(stack.pop(), 0x00);
@@ -1799,7 +1965,10 @@ pub mod tests {
         stack.push(0x06);
         stack.push(0x00);
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::RTS, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::RTS, AddressingMode::Implied),
+        );
 
         assert_eq!(cpu.registers.pc, 0x0601);
     }
@@ -1812,7 +1981,10 @@ pub mod tests {
         stack.push(0x06);
         stack.push(0x00);
         stack.push(0b00000011);
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::RTI, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::RTI, AddressingMode::Implied),
+        );
 
         let flags = cpu.registers.flags();
         assert_eq!(cpu.registers.pc, 0x0600);
@@ -1833,7 +2005,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CLC, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CLC, AddressingMode::Implied),
+        );
 
         assert!(!cpu.registers.flags().carry);
     }
@@ -1842,7 +2017,10 @@ pub mod tests {
     pub fn test_sec() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SEC, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SEC, AddressingMode::Implied),
+        );
 
         assert!(cpu.registers.flags().carry);
     }
@@ -1856,7 +2034,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CLD, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CLD, AddressingMode::Implied),
+        );
 
         assert!(!cpu.registers.flags().decimal);
     }
@@ -1865,7 +2046,10 @@ pub mod tests {
     pub fn test_sed() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SED, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SED, AddressingMode::Implied),
+        );
 
         assert!(cpu.registers.flags().decimal);
     }
@@ -1878,7 +2062,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CLI, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CLI, AddressingMode::Implied),
+        );
 
         assert!(!cpu.registers.flags().interrupt_disable);
     }
@@ -1887,7 +2074,10 @@ pub mod tests {
     pub fn test_sei() {
         let mut cpu = CPU::new();
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::SEI, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::SEI, AddressingMode::Implied),
+        );
 
         assert!(cpu.registers.flags().interrupt_disable);
     }
@@ -1900,7 +2090,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::CLV, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::CLV, AddressingMode::Implied),
+        );
 
         assert!(!cpu.registers.flags().overflow);
     }
@@ -1914,7 +2107,10 @@ pub mod tests {
             ..Default::default()
         });
 
-        execute_with_cpu(&mut cpu, Instruction::new(InstructionType::BRK, AddressingMode::Implied));
+        execute_with_cpu(
+            &mut cpu,
+            Instruction::new(InstructionType::BRK, AddressingMode::Implied),
+        );
 
         let mut stack = Stack::new(&mut cpu);
         assert_eq!(

@@ -6,15 +6,13 @@ mod rom;
 use hardware::{
     cpu::{CPU, MMU},
     memory::MemoryMapper,
+    ppu::PPU,
 };
 use instruction::{Instruction, InstructionExecutor};
 use rom::{PRG_PAGE_SIZE, ROM};
+use sdl2::{event::Event, keyboard::Keycode};
+use simplelog::{Config, LevelFilter, SimpleLogger};
 use std::{env, fs::File, io::Read};
-use simplelog::{SimpleLogger, LevelFilter, Config};
-use sdl2::{
-    keyboard::Keycode,
-    event::Event,
-};
 
 fn main() {
     SimpleLogger::init(LevelFilter::Debug, Config::default()).unwrap();
@@ -31,11 +29,12 @@ fn main() {
     let mut cpu = CPU::with_power_up_state();
     cpu.registers.pc = u16::from_le_bytes([mapper.read(0xFFFC).unwrap(), mapper.read(0xFFFD).unwrap()]);
 
-    let mut ppu = Default::default();
+    let mut ppu = PPU::new();
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("dam4nes", 800, 600)
+    let _window = video_subsystem
+        .window("dam4nes", 800, 600)
         .position_centered()
         .build()
         .unwrap();
@@ -45,10 +44,12 @@ fn main() {
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running
-                },
-                _ => ()
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
+                _ => (),
             }
         }
 

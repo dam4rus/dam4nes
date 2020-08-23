@@ -58,7 +58,7 @@ impl ROM {
     fn prg_rom_size(&self) -> usize {
         self.prg_rom_page_count as usize * PRG_PAGE_SIZE
     }
-    
+
     fn chr_rom_size(&self) -> usize {
         self.chr_rom_page_count as usize * CRH_PAGE_SIZE
     }
