@@ -11,6 +11,10 @@ use instruction::{Instruction, InstructionExecutor};
 use rom::{PRG_PAGE_SIZE, ROM};
 use std::{env, fs::File, io::Read};
 use simplelog::{SimpleLogger, LevelFilter, Config};
+use sdl2::{
+    keyboard::Keycode,
+    event::Event,
+};
 
 fn main() {
     SimpleLogger::init(LevelFilter::Debug, Config::default()).unwrap();
@@ -21,7 +25,7 @@ fn main() {
     rom_file
         .read_to_end(&mut buffer)
         .expect("Failed to read ROM file to end");
-    let rom = ROM::from_slice(buffer.as_slice()).unwrap();
+    let rom = ROM::with_content(buffer).unwrap();
     let mapper = MemoryMapper::NROM(&rom.prg_rom()[0x0000..PRG_PAGE_SIZE], &rom.prg_rom()[PRG_PAGE_SIZE..]);
 
     let mut cpu = CPU::with_power_up_state();
@@ -29,7 +33,25 @@ fn main() {
 
     let mut ppu = Default::default();
 
-    loop {
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem.window("dam4nes", 800, 600)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut event_pump = sdl_context.event_pump().unwrap();
+
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                _ => ()
+            }
+        }
+
         match Instruction::from_machine_code(mapper.slice_from(cpu.registers.pc).unwrap()) {
             Ok(Some(instruction)) => {
                 InstructionExecutor::new(&mut MMU::new(&mut cpu, &mut ppu, Some(&mapper))).execute(instruction);
@@ -37,10 +59,10 @@ fn main() {
                     cpu.registers.pc += instruction.addressing_mode.byte_length() as u16;
                 }
             }
-            Ok(None) => break,
+            Ok(None) => break 'running,
             Err(err) => {
                 println!("Error at offset {:#X}. {}", cpu.registers.pc, err);
-                break;
+                break 'running;
             }
         }
 
@@ -48,6 +70,4 @@ fn main() {
         // println!("ppu clock: {:?}", ppu.clock);
         ppu.update();
     }
-
-    println!("End");
 }
