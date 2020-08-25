@@ -201,18 +201,17 @@ impl Tile {
         match slice.len() {
             16 => {
                 let mut tile = [[0u8; 8]; 8];
-                tile.iter_mut()
-                    .zip({
-                        let (first, second) = slice.split_at(8);
-                        first.iter().zip(second)
-                    })
-                    .for_each(|(row, planes)| {
-                        row.iter_mut().rev().enumerate().for_each(|(bit_index, color)| {
-                            let color_0 = (planes.0 >> bit_index) & 0x01;
-                            let color_1 = ((planes.1 >> bit_index) & 0x01) << 1;
-                            *color = color_0 | color_1;
-                        });
-                    });
+
+                let (first_planes, second_planes) = slice.split_at(8);
+                let zipped_planes = first_planes.iter().zip(second_planes);
+
+                for (row, planes) in &mut tile.iter_mut().zip(zipped_planes) {
+                    for (bit_index, color) in &mut row.iter_mut().rev().enumerate() {
+                        let color_0 = (planes.0 >> bit_index) & 0x01;
+                        let color_1 = ((planes.1 >> bit_index) & 0x01) << 1;
+                        *color = color_0 | color_1;
+                    }
+                }
 
                 Ok(Self(tile))
             }
