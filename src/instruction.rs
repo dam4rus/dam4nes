@@ -733,7 +733,13 @@ impl<'a, 'mmu, 'mapped> InstructionExecutor<'a, 'mmu, 'mapped> {
             }
             InstructionType::JSR => match instruction.addressing_mode {
                 AddressingMode::Absolute(address) => {
-                    let return_address = self.mmu.cpu().registers.pc.wrapping_sub(1).to_le_bytes();
+                    let return_address = self.mmu
+                        .cpu()
+                        .registers
+                        .pc
+                        .wrapping_add(instruction.addressing_mode.byte_length() as u16)
+                        .wrapping_sub(1)
+                        .to_le_bytes();
                     let mut stack = Stack::new(self.mmu.cpu_mut());
                     stack.push(return_address[1]);
                     stack.push(return_address[0]);
@@ -1668,7 +1674,7 @@ pub mod tests {
             Instruction::new(InstructionType::BCC, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1684,7 +1690,7 @@ pub mod tests {
             Instruction::new(InstructionType::BCS, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1696,7 +1702,7 @@ pub mod tests {
             Instruction::new(InstructionType::BNE, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1712,7 +1718,7 @@ pub mod tests {
             Instruction::new(InstructionType::BEQ, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1724,7 +1730,7 @@ pub mod tests {
             Instruction::new(InstructionType::BPL, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1740,7 +1746,7 @@ pub mod tests {
             Instruction::new(InstructionType::BMI, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1752,7 +1758,7 @@ pub mod tests {
             Instruction::new(InstructionType::BVC, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1768,7 +1774,7 @@ pub mod tests {
             Instruction::new(InstructionType::BVS, AddressingMode::Relative(2)),
         );
 
-        assert_eq!(cpu.registers.pc, 0x04);
+        assert_eq!(cpu.registers.pc, 0x02);
     }
 
     #[test]
@@ -1952,7 +1958,7 @@ pub mod tests {
         );
 
         let mut stack = Stack::new(&mut cpu);
-        assert_eq!(stack.pop(), 0x00);
+        assert_eq!(stack.pop(), 0x03);
         assert_eq!(stack.pop(), 0x06);
         assert_eq!(cpu.registers.pc, 0x1000);
     }

@@ -5,8 +5,11 @@ mod rom;
 
 use hardware::{
     cpu::{CPU, MMU as CPUMMU},
-    memory::MemoryMapper,
-    ppu::{PPU, MMU as PPUMMU, NameTables, NameTable, PatternTables, PATTERN_TABLE_SECTION_SIZE},
+    memory::{MemoryMapper, Memory},
+    ppu::{
+        PPU, MMU as PPUMMU, NameTables, NameTable, PatternTables, State as PPUState, StatusFlags as PPUStatusFlags,
+        PATTERN_TABLE_SECTION_SIZE, NAME_TABLE_SIZE, Tile, TILE_SIZE, PATTERN_TILE_SIZE,
+    },
 };
 use instruction::{Instruction, InstructionExecutor};
 use rom::{PRG_PAGE_SIZE, ROM};
@@ -72,33 +75,77 @@ fn main() {
         }
 
         ppu.clock.step();
-        let pattern_tables = PatternTables::new(
-            &rom.chr_rom()[..PATTERN_TABLE_SECTION_SIZE],
-            &rom.chr_rom()[PATTERN_TABLE_SECTION_SIZE..(PATTERN_TABLE_SECTION_SIZE * 2)],
-        ).unwrap();
+        match ppu.state() {
+            Some(PPUState::VBlankToggle(true)) => {
+                let status_flags = ppu.registers.status_flags();
+                ppu.registers.set_status_flags(PPUStatusFlags {
+                    vblank: true,
+                    ..status_flags
+                });
 
-        let old_vblank = ppu.registers.status_flags().vblank;
-        ppu.update(pattern_tables, &mut bitmap);
-        if !old_vblank && ppu.registers.status_flags().vblank {
-            canvas.set_draw_color(Color::RGB(255, 255, 255));
-            canvas.clear();
-            for y in 0..256 {
-                for x in 0..256 {
-                    canvas.set_draw_color(match bitmap[y][x] {
-                        0 => Color::RGB(0, 0, 0),
-                        1 => Color::RGB(255, 0, 0),
-                        2 => Color::RGB(0, 255, 0),
-                        3 => Color::RGB(0, 0, 255),
-                        _ => Color::RGB(255, 255, 255),
-                    });
-                    canvas.fill_rect(Rect::new(x as i32 * rect_scale, y as i32 * rect_scale, rect_scale as u32, rect_scale as u32)).unwrap();
+                canvas.set_draw_color(Color::RGB(255, 255, 255));
+                canvas.clear();
+
+                for (y, row) in bitmap.iter().enumerate() {
+                    for (x, pixel) in row.iter().enumerate() {
+                        canvas.set_draw_color(match pixel {
+                            0 => Color::RGB(0, 0, 0),
+                            1 => Color::RGB(255, 0, 0),
+                            2 => Color::RGB(0, 255, 0),
+                            3 => Color::RGB(0, 0, 255),
+                            _ => Color::RGB(255, 255, 255),
+                        });
+                        canvas.fill_rect(Rect::new(
+                            x as i32 * rect_scale,
+                            y as i32 * rect_scale,
+                            rect_scale as u32,
+                            rect_scale as u32,
+                        )).unwrap();
+                    }
+                }
+
+                canvas.present();
+            }
+            Some(PPUState::VBlankToggle(false)) => {
+                let status_flags = ppu.registers.status_flags();
+                ppu.registers.set_status_flags(PPUStatusFlags {
+                    vblank: false,
+                    ..status_flags
+                });
+            }
+            Some(PPUState::RenderTile{ x, y }) => {
+                let mut chr_rom_chunks = rom.chr_rom().chunks_exact(PATTERN_TABLE_SECTION_SIZE);
+                let pattern_tables = PatternTables::new(
+                    chr_rom_chunks.next().unwrap(),
+                    chr_rom_chunks.next().unwrap(),
+                ).unwrap();
+
+                let top_left_name_table = NameTable::with_slice(&ppu.internal_memory[..NAME_TABLE_SIZE]).unwrap();
+                let top_right_name_table = NameTable::with_slice(
+                    &ppu.internal_memory[NAME_TABLE_SIZE..(NAME_TABLE_SIZE * 2)]
+                ).unwrap();
+
+                let mmu = PPUMMU {
+                    pattern_tables,
+                    name_tables: NameTables::new(
+                        top_left_name_table.clone(),
+                        top_right_name_table.clone(),
+                        top_left_name_table,
+                        top_right_name_table,
+                    )
+                };
+
+                let start_address = (((y / TILE_SIZE) * 32) + (x / TILE_SIZE)) * PATTERN_TILE_SIZE as u32;
+                let pattern_tile_bytes = (start_address..start_address + 16)
+                    .map(|address| mmu.read(address as u16).unwrap())
+                    .collect::<Vec<_>>();
+
+                let tile = Tile::from_pattern_table_slice(pattern_tile_bytes.as_slice()).unwrap();
+                for (tile_row, out_row) in tile.0.iter().zip(&mut bitmap[y as usize..]) {
+                    out_row[x as usize..x as usize + 8].copy_from_slice(tile_row);
                 }
             }
-
-            canvas.present();
+            None => (),
         }
-
-
-        //println!("");
     }
 }

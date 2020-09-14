@@ -107,8 +107,8 @@ impl<'a, 'b> Memory for MMU<'a, 'b> {
                     _ => unreachable!(),
                 })
             }
-            0x4000..=0x4017 => unimplemented!("APU and IO registers"),
-            0x4018..=0x401F => unimplemented!("APU and IO functionality"),
+            0x4000..=0x4017 => None,
+            0x4018..=0x401F => None,
             0x4020..=0xFFFF => self.mapper.and_then(|mapper| mapper.read(address)),
         }
     }
@@ -130,6 +130,8 @@ impl<'a, 'b> Memory for MMU<'a, 'b> {
                     _ => unreachable!(),
                 }
             }
+            0x4000..=0x4017 => (),
+            0x4018..=0x401F => (),
             _ => panic!("Access violation. Trying to write to read only address {:#X}", address),
         }
     }

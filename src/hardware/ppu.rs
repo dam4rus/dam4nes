@@ -2,11 +2,12 @@ use super::memory::Memory;
 
 use log::debug;
 
-const INTERNAL_MEMORY_SIZE: usize = 2 * 1024;
-const OAM_SIZE: usize = 256;
+pub const INTERNAL_MEMORY_SIZE: usize = 2 * 1024;
+pub const OAM_SIZE: usize = 256;
 pub const PATTERN_TABLE_SECTION_SIZE: usize = 4 * 1024;
 pub const NAME_TABLE_SIZE: usize = 1024;
-const TILE_SIZE: usize = 16;
+pub const TILE_SIZE: u32 = 8;
+pub const PATTERN_TILE_SIZE: usize = 16;
 
 #[derive(Copy, Clone)]
 pub struct PPU {
@@ -26,59 +27,28 @@ impl PPU {
         }
     }
 
-    pub fn update(&mut self, pattern_tables: PatternTables, bitmap: &mut[[u8; 256]; 256]) {
-        let mmu = MMU {
-            pattern_tables,
-            name_tables: NameTables::new(
-                NameTable::with_slice(&self.internal_memory[..NAME_TABLE_SIZE]).unwrap(),
-                NameTable::with_slice(&self.internal_memory[NAME_TABLE_SIZE..(NAME_TABLE_SIZE * 2)]).unwrap(),
-                NameTable::with_slice(&self.internal_memory[..NAME_TABLE_SIZE]).unwrap(),
-                NameTable::with_slice(&self.internal_memory[NAME_TABLE_SIZE..(NAME_TABLE_SIZE * 2)]).unwrap(),
-            )
-        };
-
+    pub fn state(&self) -> Option<State> {
         match (self.clock.scanline, self.clock.cycle) {
-            (scanline @ 0..=239, cycle @ 1..=256) => {
-                let x = (cycle - 1) / 16;
-                let y = scanline / 16;
-                let start_address = (y * 256) + (x * 16);
-                let bytes = (start_address..start_address + 16).map(|address| mmu.read(address as u16).unwrap()).collect::<Vec<_>>();
-                let tile = Tile::from_slice(bytes.as_slice()).unwrap();
-                for color_y in 0..8 {
-                    for color_x in 0..8 {
-                        bitmap[((y * 16) + color_y) as usize][((x * 16) + color_x) as usize] = tile.0[color_y as usize][color_x as usize];
-                    }
-                }
-            }
-            (241, 1) => {
-                debug!("Setting vblank");
-                let status_flags = self.registers.status_flags();
-                self.registers.set_status_flags(StatusFlags {
-                    vblank: true,
-                    ..status_flags
-                });
-            }
-            (261, 1) => {
-                debug!("Clearing vblank");
-                let status_flags = self.registers.status_flags();
-                self.registers.set_status_flags(StatusFlags {
-                    vblank: false,
-                    ..status_flags
+            (scanline @ 0..=239, cycle @ 1..=256) if scanline % TILE_SIZE == 0 && cycle % TILE_SIZE == 1 => {
+                Some(State::RenderTile {
+                    x: (cycle - 1),
+                    y: scanline,
                 })
             }
-            _ => (),
+            (241, 1) => Some(State::VBlankToggle(true)),
+            (261, 1) => Some(State::VBlankToggle(false)),
+            _ => None,
         }
     }
+}
 
-    pub fn name_tables(&self) -> NameTables {
-        let mut chunks = self.internal_memory.chunks_exact(NAME_TABLE_SIZE);
-        NameTables::new(
-            NameTable(chunks.next().unwrap()),
-            NameTable(chunks.next().unwrap()),
-            NameTable(chunks.next().unwrap()),
-            NameTable(chunks.next().unwrap())
-        )
-    }
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum State {
+    RenderTile {
+        x: u32,
+        y: u32,
+    },
+    VBlankToggle(bool),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
@@ -232,9 +202,9 @@ impl<'a> NameTables<'a> {
 pub struct Tile(pub [[u8; 8]; 8]);
 
 impl Tile {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, String> {
+    pub fn from_pattern_table_slice(slice: &[u8]) -> Result<Self, String> {
         match slice.len() {
-            16 => {
+            PATTERN_TILE_SIZE => {
                 let mut tile = [[0u8; 8]; 8];
 
                 let (first_planes, second_planes) = slice.split_at(8);
@@ -252,7 +222,7 @@ impl Tile {
             }
             n => Err(format!(
                 "Invalid tile slice size. A tile needs to be {} bytes but got {}",
-                TILE_SIZE, n
+                PATTERN_TILE_SIZE, n
             )),
         }
     }
@@ -381,7 +351,7 @@ mod tests {
         let tile_data: [u8; 16] = [
             0x41, 0xC2, 0x44, 0x48, 0x10, 0x20, 0x40, 0x80, 0x01, 0x02, 0x04, 0x08, 0x16, 0x21, 0x42, 0x87,
         ];
-        let tile = Tile::from_slice(&tile_data).unwrap();
+        let tile = Tile::from_pattern_table_slice(&tile_data).unwrap();
         let Tile(tile_matrix) = tile;
         assert_eq!(
             tile_matrix,
