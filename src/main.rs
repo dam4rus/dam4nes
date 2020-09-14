@@ -34,8 +34,9 @@ fn main() {
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    let rect_scale: i32 = 3;
     let window = video_subsystem
-        .window("dam4nes", 1600, 900)
+        .window("dam4nes", (256 * rect_scale + 30) as u32, (256 * rect_scale + 30) as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -71,13 +72,14 @@ fn main() {
         }
 
         ppu.clock.step();
-        // println!("ppu clock: {:?}", ppu.clock);
         let pattern_tables = PatternTables::new(
             &rom.chr_rom()[..PATTERN_TABLE_SECTION_SIZE],
             &rom.chr_rom()[PATTERN_TABLE_SECTION_SIZE..(PATTERN_TABLE_SECTION_SIZE * 2)],
         ).unwrap();
+
+        let old_vblank = ppu.registers.status_flags().vblank;
         ppu.update(pattern_tables, &mut bitmap);
-        if ppu.registers.status_flags().vblank {
+        if !old_vblank && ppu.registers.status_flags().vblank {
             canvas.set_draw_color(Color::RGB(255, 255, 255));
             canvas.clear();
             for y in 0..256 {
@@ -89,7 +91,6 @@ fn main() {
                         3 => Color::RGB(0, 0, 255),
                         _ => Color::RGB(255, 255, 255),
                     });
-                    let rect_scale: i32 = 3;
                     canvas.fill_rect(Rect::new(x as i32 * rect_scale, y as i32 * rect_scale, rect_scale as u32, rect_scale as u32)).unwrap();
                 }
             }

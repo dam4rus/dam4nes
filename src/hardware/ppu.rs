@@ -46,7 +46,6 @@ impl PPU {
                 let tile = Tile::from_slice(bytes.as_slice()).unwrap();
                 for color_y in 0..8 {
                     for color_x in 0..8 {
-                        //println!("{} {}", ((x * 16) + color_x), (y + color_y));
                         bitmap[((y * 16) + color_y) as usize][((x * 16) + color_x) as usize] = tile.0[color_y as usize][color_x as usize];
                     }
                 }

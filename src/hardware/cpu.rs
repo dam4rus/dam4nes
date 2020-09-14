@@ -102,8 +102,8 @@ impl<'a, 'b> Memory for MMU<'a, 'b> {
                     3 => registers.oamaddr,
                     4 => registers.oamdata,
                     5 => registers.ppuscroll,
-                    6 => registers.ppudata,
-                    7 => registers.oamdma,
+                    6 => registers.ppuaddr,
+                    7 => registers.ppudata,
                     _ => unreachable!(),
                 })
             }
@@ -125,8 +125,8 @@ impl<'a, 'b> Memory for MMU<'a, 'b> {
                     3 => registers.oamaddr = value,
                     4 => registers.oamdata = value,
                     5 => registers.ppuscroll = value,
-                    6 => registers.ppudata = value,
-                    7 => registers.oamdata = value,
+                    6 => registers.ppuaddr = value,
+                    7 => registers.ppudata = value,
                     _ => unreachable!(),
                 }
             }
