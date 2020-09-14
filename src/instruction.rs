@@ -486,7 +486,7 @@ impl<'a, 'mmu, 'mapped> InstructionExecutor<'a, 'mmu, 'mapped> {
     }
 
     pub fn execute(&mut self, instruction: Instruction) {
-        debug!("Executing {}", instruction);
+        //debug!("Executing {}", instruction);
         match instruction.instruction_type {
             InstructionType::ADC => {
                 let value = self.read_8_bit_value(instruction);

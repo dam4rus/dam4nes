@@ -4,8 +4,8 @@ use log::debug;
 
 const INTERNAL_MEMORY_SIZE: usize = 2 * 1024;
 const OAM_SIZE: usize = 256;
-const PATTERN_TABLE_SECTION_SIZE: usize = 4 * 1024;
-const NAME_TABLE_SIZE: usize = 1024;
+pub const PATTERN_TABLE_SECTION_SIZE: usize = 4 * 1024;
+pub const NAME_TABLE_SIZE: usize = 1024;
 const TILE_SIZE: usize = 16;
 
 #[derive(Copy, Clone)]
@@ -26,8 +26,31 @@ impl PPU {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, pattern_tables: PatternTables, bitmap: &mut[[u8; 256]; 256]) {
+        let mmu = MMU {
+            pattern_tables,
+            name_tables: NameTables::new(
+                NameTable::with_slice(&self.internal_memory[..NAME_TABLE_SIZE]).unwrap(),
+                NameTable::with_slice(&self.internal_memory[NAME_TABLE_SIZE..(NAME_TABLE_SIZE * 2)]).unwrap(),
+                NameTable::with_slice(&self.internal_memory[..NAME_TABLE_SIZE]).unwrap(),
+                NameTable::with_slice(&self.internal_memory[NAME_TABLE_SIZE..(NAME_TABLE_SIZE * 2)]).unwrap(),
+            )
+        };
+
         match (self.clock.scanline, self.clock.cycle) {
+            (scanline @ 0..=239, cycle @ 1..=256) => {
+                let x = (cycle - 1) / 16;
+                let y = scanline / 16;
+                let start_address = (y * 256) + (x * 16);
+                let bytes = (start_address..start_address + 16).map(|address| mmu.read(address as u16).unwrap()).collect::<Vec<_>>();
+                let tile = Tile::from_slice(bytes.as_slice()).unwrap();
+                for color_y in 0..8 {
+                    for color_x in 0..8 {
+                        //println!("{} {}", ((x * 16) + color_x), (y + color_y));
+                        bitmap[((y * 16) + color_y) as usize][((x * 16) + color_x) as usize] = tile.0[color_y as usize][color_x as usize];
+                    }
+                }
+            }
             (241, 1) => {
                 debug!("Setting vblank");
                 let status_flags = self.registers.status_flags();
@@ -47,6 +70,16 @@ impl PPU {
             _ => (),
         }
     }
+
+    pub fn name_tables(&self) -> NameTables {
+        let mut chunks = self.internal_memory.chunks_exact(NAME_TABLE_SIZE);
+        NameTables::new(
+            NameTable(chunks.next().unwrap()),
+            NameTable(chunks.next().unwrap()),
+            NameTable(chunks.next().unwrap()),
+            NameTable(chunks.next().unwrap())
+        )
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
@@ -63,11 +96,6 @@ pub struct Registers {
 }
 
 impl Registers {
-    // pub fn base_nametable_address(&self) -> u16 {
-    //     let value = self.ppuctrl & 0b0000_0011;
-    //     0x2000 + (value as u16 * 0x0400)
-    // }
-
     pub fn status_flags(&self) -> StatusFlags {
         StatusFlags::from(self.ppustatus)
     }
@@ -94,13 +122,19 @@ pub struct StatusFlags {
     pub vblank: bool,
 }
 
+impl StatusFlags {
+    const SPRITE_OVERFLOW_VALUE: u8 = 0b0010_0000;
+    const SPRITE_0_HIT_VALUE: u8 = 0b0100_0000;
+    const VLBLANK_VALUE: u8 = 0b1000_0000;
+}
+
 impl From<u8> for StatusFlags {
     fn from(value: u8) -> Self {
         Self {
             least_significant_bits: (value & 0b0001_1111),
-            sprite_overflow: (value & 0b0010_0000) != 0,
-            sprite_0_hit: (value & 0b0100_0000) != 0,
-            vblank: (value & 0b1000_000) != 0,
+            sprite_overflow: (value & Self::SPRITE_OVERFLOW_VALUE) != 0,
+            sprite_0_hit: (value & Self::SPRITE_0_HIT_VALUE) != 0,
+            vblank: (value & Self::VLBLANK_VALUE) != 0,
         }
     }
 }
@@ -109,13 +143,13 @@ impl Into<u8> for StatusFlags {
     fn into(self) -> u8 {
         let mut value = self.least_significant_bits;
         if self.sprite_overflow {
-            value |= 0b0010_0000;
+            value |= Self::SPRITE_OVERFLOW_VALUE;
         }
         if self.sprite_0_hit {
-            value |= 0b0100_0000;
+            value |= Self::SPRITE_0_HIT_VALUE;
         }
         if self.vblank {
-            value |= 0b1000_0000;
+            value |= Self::VLBLANK_VALUE;
         }
         value
     }
@@ -161,35 +195,37 @@ impl<'a> PatternTables<'a> {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct NameTable<'a>(pub &'a [u8]);
+
+impl<'a> NameTable<'a> {
+    pub fn with_slice(slice: &'a [u8]) -> Result<Self, String> {
+        match slice.len() {
+            NAME_TABLE_SIZE => Ok(Self(slice)),
+            len => Err(format!("Invalid name table size. Needs to be {} bytes, got: {}", NAME_TABLE_SIZE, len)),
+        }
+    }
+
+    pub fn attribute_table(&self) -> &[u8] {
+        &self.0[self.0.len() - 64..]
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct NameTables<'a> {
-    pub top_left: &'a [u8],
-    pub top_right: &'a [u8],
-    pub bottom_left: &'a [u8],
-    pub bottom_right: &'a [u8],
+    top_left: NameTable<'a>,
+    top_right: NameTable<'a>,
+    bottom_left: NameTable<'a>,
+    bottom_right: NameTable<'a>,
 }
 
 impl<'a> NameTables<'a> {
     pub fn new(
-        top_left: &'a [u8],
-        top_right: &'a [u8],
-        bottom_left: &'a [u8],
-        bottom_right: &'a [u8],
-    ) -> Result<Self, String> {
-        match (top_left.len(), top_right.len(), bottom_left.len(), bottom_right.len()) {
-            (NAME_TABLE_SIZE, NAME_TABLE_SIZE, NAME_TABLE_SIZE, NAME_TABLE_SIZE) => {
-                Ok(Self { top_left, top_right, bottom_left, bottom_right })
-            }
-            (top_left_len, top_right_len, bottom_left_len, bottom_right_len) => {
-                Err(format!(
-                    "Invalid nametable slice size. Needs to be {} bytes, got: (top_left: {}, top_right: {}, bottom_left: {}, bottom_right: {})",
-                    NAME_TABLE_SIZE,
-                    top_left_len,
-                    top_right_len,
-                    bottom_left_len,
-                    bottom_right_len,
-                ))
-            }
-        }
+        top_left: NameTable<'a>,
+        top_right: NameTable<'a>,
+        bottom_left: NameTable<'a>,
+        bottom_right: NameTable<'a>,
+    ) -> Self {
+        Self{ top_left, top_right, bottom_left, bottom_right }
     }
 }
 
@@ -312,20 +348,20 @@ impl Palette {
     ];
 }
 
-pub struct MMU<'a, 'b, 'c> {
-    pub pattern_tables: &'a PatternTables<'b>,
-    pub name_tables: &'a NameTables<'c>,
+pub struct MMU<'a, 'b> {
+    pub pattern_tables: PatternTables<'a>,
+    pub name_tables: NameTables<'b>,
 }
 
-impl<'a, 'b, 'c> Memory for MMU<'a, 'b, 'c> {
+impl<'a, 'b> Memory for MMU<'a, 'b> {
     fn read(&self, address: u16) -> Option<u8> {
         match address {
             0x0000..=0x0FFF => Some(self.pattern_tables.left[address as usize]),
             start @ 0x1000..=0x1FFF => Some(self.pattern_tables.right[(address - start) as usize]),
-            start @ 0x2000..=0x23FF => Some(self.name_tables.top_left[(address - start) as usize]),
-            start @ 0x2400..=0x27FF => Some(self.name_tables.top_right[(address - start) as usize]),
-            start @ 0x2800..=0x2BFF => Some(self.name_tables.bottom_left[(address - start) as usize]),
-            start @ 0x2C00..=0x2FFF => Some(self.name_tables.bottom_right[(address - start) as usize]),
+            start @ 0x2000..=0x23FF => Some(self.name_tables.top_left.0[(address - start) as usize]),
+            start @ 0x2400..=0x27FF => Some(self.name_tables.top_right.0[(address - start) as usize]),
+            start @ 0x2800..=0x2BFF => Some(self.name_tables.bottom_left.0[(address - start) as usize]),
+            start @ 0x2C00..=0x2FFF => Some(self.name_tables.bottom_right.0[(address - start) as usize]),
             0x3000..=0x3EFF => self.read(address - 0x1000), // mirrors 0x2000..=0x2EFF
             0x3F00..=0x3FFF => unimplemented!(),            // palette ram indexes
             _ => None,

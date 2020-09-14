@@ -4,13 +4,13 @@ mod instruction;
 mod rom;
 
 use hardware::{
-    cpu::{CPU, MMU},
+    cpu::{CPU, MMU as CPUMMU},
     memory::MemoryMapper,
-    ppu::PPU,
+    ppu::{PPU, MMU as PPUMMU, NameTables, NameTable, PatternTables, PATTERN_TABLE_SECTION_SIZE},
 };
 use instruction::{Instruction, InstructionExecutor};
 use rom::{PRG_PAGE_SIZE, ROM};
-use sdl2::{event::Event, keyboard::Keycode};
+use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Rect};
 use simplelog::{Config, LevelFilter, SimpleLogger};
 use std::{env, fs::File, io::Read};
 
@@ -30,16 +30,19 @@ fn main() {
     cpu.registers.pc = u16::from_le_bytes([mapper.read(0xFFFC).unwrap(), mapper.read(0xFFFD).unwrap()]);
 
     let mut ppu = PPU::new();
+    
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let _window = video_subsystem
-        .window("dam4nes", 800, 600)
+    let window = video_subsystem
+        .window("dam4nes", 1600, 900)
         .position_centered()
         .build()
         .unwrap();
 
+    let mut canvas = window.into_canvas().build().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut bitmap = [[0u8; 256]; 256];
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -55,7 +58,7 @@ fn main() {
 
         match Instruction::from_machine_code(mapper.slice_from(cpu.registers.pc).unwrap()) {
             Ok(Some(instruction)) => {
-                InstructionExecutor::new(&mut MMU::new(&mut cpu, &mut ppu, Some(&mapper))).execute(instruction);
+                InstructionExecutor::new(&mut CPUMMU::new(&mut cpu, &mut ppu, Some(&mapper))).execute(instruction);
                 if instruction.instruction_type.increments_pc() {
                     cpu.registers.pc += instruction.addressing_mode.byte_length() as u16;
                 }
@@ -69,6 +72,32 @@ fn main() {
 
         ppu.clock.step();
         // println!("ppu clock: {:?}", ppu.clock);
-        ppu.update();
+        let pattern_tables = PatternTables::new(
+            &rom.chr_rom()[..PATTERN_TABLE_SECTION_SIZE],
+            &rom.chr_rom()[PATTERN_TABLE_SECTION_SIZE..(PATTERN_TABLE_SECTION_SIZE * 2)],
+        ).unwrap();
+        ppu.update(pattern_tables, &mut bitmap);
+        if ppu.registers.status_flags().vblank {
+            canvas.set_draw_color(Color::RGB(255, 255, 255));
+            canvas.clear();
+            for y in 0..256 {
+                for x in 0..256 {
+                    canvas.set_draw_color(match bitmap[y][x] {
+                        0 => Color::RGB(0, 0, 0),
+                        1 => Color::RGB(255, 0, 0),
+                        2 => Color::RGB(0, 255, 0),
+                        3 => Color::RGB(0, 0, 255),
+                        _ => Color::RGB(255, 255, 255),
+                    });
+                    let rect_scale: i32 = 3;
+                    canvas.fill_rect(Rect::new(x as i32 * rect_scale, y as i32 * rect_scale, rect_scale as u32, rect_scale as u32)).unwrap();
+                }
+            }
+
+            canvas.present();
+        }
+
+
+        //println!("");
     }
 }
